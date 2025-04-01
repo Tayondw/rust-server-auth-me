@@ -1,0 +1,30 @@
+[package]
+name = "auth-me"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+aws-config = "1.6.1"
+aws-sdk-s3 = "1.82.0"
+axum = "0.8.1"
+axum-macros = "0.5.0"
+bcrypt = "0.17.0"
+chrono = { version = "0.4.40", features = ["serde"] }
+cookie = "0.18.1"
+csrf = "0.5.0"
+diesel = { version = "2.2.8", features = ["postgres", "r2d2"] }
+dotenvy = "0.15.7"
+jsonwebtoken = "9.3.1"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+thiserror = "2.0.12"
+time = "0.3.40"
+tokio = { version = "1.44.1", features = ["full"] }
+tower = "0.5.2"
+tower-http = { version = "0.6.2", features = ["catch-panic", "cors", "set-header", "set-status", "trace", "validate-request",] }
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
+uuid = "1.16.0"
+
+[dev-dependencies]
+cargo-watch = "8.5.3"

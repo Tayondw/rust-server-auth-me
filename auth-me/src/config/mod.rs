@@ -1,0 +1,20 @@
+// pub mod aws;
+pub mod database;
+
+// use aws::AwsConfig;
+use database::{ DatabaseConfig, ConfigError };
+
+#[derive(Debug)]
+pub struct Config {
+//     pub aws: AwsConfig,
+    pub database: DatabaseConfig,
+}
+
+impl Config {
+    pub async fn new() -> Result<Self, ConfigError> {
+        Ok(Self {
+            // aws: AwsConfig::new().await,
+            database: DatabaseConfig::new()?, // Handle the Result properly
+        })
+    }
+}
