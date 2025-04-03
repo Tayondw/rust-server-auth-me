@@ -1,31 +1,32 @@
 use axum::{
     routing::{ get, post },
     Router,
-    extract::{ Json, Path, State, Request },
+    extract::{ Json, State },
     http::{ HeaderValue, Method, StatusCode, HeaderName },
-    middleware::{ self, Next, from_fn },
     response::{ Response, IntoResponse },
 };
 use diesel::prelude::*;
-use diesel::r2d2::{ self, ConnectionManager, Pool };
+use diesel::r2d2::{ ConnectionManager, Pool };
 use std::{ collections::HashMap, env, net::SocketAddr, sync::Arc };
 use serde::{ Deserialize, Serialize };
-use tower_http::{ cors::{ Any, CorsLayer }, trace::TraceLayer };
+use tower_http::{ cors::CorsLayer , trace::TraceLayer };
 use dotenvy::dotenv;
 use tracing::{ info, error, warn, debug };
 use thiserror::Error;
-use http_body_util::combinators::BoxBody;
-use std::future::Future;
+
 
 mod db;
 mod config;
 
 use config::Config;
 
-#[macro_use]
+// #[macro_use]
 extern crate diesel;
 pub mod models;
 pub mod schema;
+mod middleware;
+
+use middleware::csrf;
 
 // Define AppState to hold shared state
 // create a struct to represent the state for a web application using a PostgreSQL database connection pool
@@ -118,9 +119,9 @@ async fn main() {
         .route("/test", post(test_handler))
         .route("/error", get(error_handler))
         .fallback(handler_404)
-        .layer(cors) // Add the CORS middleware here
         .layer(TraceLayer::new_for_http())
-        .with_state(shared_state);
+        .with_state(shared_state)
+        .layer(cors); // Add the CORS middleware here
 
     // Run the server
     // socket address are made up of IP address and port
@@ -182,7 +183,6 @@ impl IntoResponse for AppError {
 
 // Handlers
 async fn test_handler(Json(req): Json<TestRequest>) -> impl IntoResponse {
-    info!("Received request: {:?}", req);
     Json(ApiResponse {
         success: true,
         data: Some(req),
