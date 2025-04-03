@@ -1,16 +1,26 @@
+use axum::{
+    routing::{ get, post },
+    Router,
+    extract::{ Json, Path, State, Request },
+    http::{ HeaderValue, Method, StatusCode, HeaderName },
+    middleware::{ self, Next, from_fn },
+    response::{ Response, IntoResponse },
+};
 use diesel::prelude::*;
 use diesel::r2d2::{ self, ConnectionManager, Pool };
+use std::{ collections::HashMap, env, net::SocketAddr, sync::Arc };
+use serde::{ Deserialize, Serialize };
+use tower_http::{ cors::{ Any, CorsLayer }, trace::TraceLayer };
 use dotenvy::dotenv;
-use std::sync::Arc;
 use tracing::{ info, error, warn, debug };
+use thiserror::Error;
+use http_body_util::combinators::BoxBody;
+use std::future::Future;
 
 mod db;
 mod config;
 
 use config::Config;
-
-use axum::{ routing::{ get, post }, Router, extract::State };
-use std::net::SocketAddr;
 
 #[macro_use]
 extern crate diesel;
@@ -35,6 +45,7 @@ type AppStateShare = Arc<AppState>;
 async fn main() {
     // Load .env file
     dotenv().ok();
+    env_logger::init();
 
     // Access environment variables
     // Handle error properly
@@ -62,12 +73,53 @@ async fn main() {
     // Initialize tracing for logging
     // tracing is a framework for instrumenting applications
     // it provides a set of abstractions for logging, tracing, and metrics
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).try_init().ok(); // Avoids panicking if already set
+
+    // Get environment
+    let environment = std::env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string());
+
+    // Set up CORS middleware
+    // CORS middleware is a middleware that allows you to configure cross-origin resource sharing (CORS)
+    // it allows you to specify which origins are allowed to make requests to your server
+    // Enable CORS
+    // Configure CORS based on environment
+    let cors = if environment == "production" {
+        CorsLayer::new()
+            .allow_origin("https://your-production-domain.com".parse::<HeaderValue>().unwrap())
+            .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
+            .allow_headers([
+                HeaderName::from_static("content-type"),
+                HeaderName::from_static("authorization"),
+            ])
+            .allow_credentials(true)
+    } else {
+        // Development CORS settings
+        CorsLayer::new()
+            .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
+            .allow_methods([
+                Method::GET,
+                Method::POST,
+                Method::PATCH,
+                Method::DELETE,
+                Method::OPTIONS,
+            ])
+            .allow_headers([
+                HeaderName::from_static("content-type"),
+                HeaderName::from_static("authorization"),
+                HeaderName::from_static("x-csrf-token"),
+            ])
+            .allow_credentials(true)
+    };
 
     // Build our application with routes
     let app = Router::new()
         .route("/", get(root))
         .route("/health", get(health_check))
+        .route("/test", post(test_handler))
+        .route("/error", get(error_handler))
+        .fallback(handler_404)
+        .layer(cors) // Add the CORS middleware here
+        .layer(TraceLayer::new_for_http())
         .with_state(shared_state);
 
     // Run the server
@@ -75,10 +127,75 @@ async fn main() {
     // brackets are used to indicate that ipv4 is used
     // the port are the last 4 digits
     let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
-    println!("Server running on https://{}", addr);
+    println!("Server running on http://{}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app.into_make_service()).await.unwrap();
+}
+
+// Request and Response Models
+#[derive(Serialize, Deserialize)]
+struct TestRequest {
+    hello: String,
+}
+
+#[derive(Serialize)]
+struct ApiResponse<T> {
+    success: bool,
+    data: Option<T>,
+    message: Option<String>,
+}
+
+// Error Handling
+#[derive(Debug, Error)]
+enum AppError {
+    #[error("The requested resource couldn't be found.")]
+    NotFound,
+
+    #[error("Validation error")] ValidationError(HashMap<String, String>),
+
+    #[error("Internal Server Error")]
+    InternalServerError,
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        let status_code = match self {
+            AppError::NotFound => StatusCode::NOT_FOUND,
+            AppError::ValidationError(_) => StatusCode::BAD_REQUEST,
+            AppError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+
+        let mut response_body =
+            serde_json::json!({
+            "success": false,
+            "message": self.to_string(),
+        });
+
+        if let AppError::ValidationError(errors) = self {
+            response_body["errors"] = serde_json::to_value(errors).unwrap();
+        }
+
+        (status_code, Json(response_body)).into_response()
+    }
+}
+
+// Handlers
+async fn test_handler(Json(req): Json<TestRequest>) -> impl IntoResponse {
+    info!("Received request: {:?}", req);
+    Json(ApiResponse {
+        success: true,
+        data: Some(req),
+        message: Some("Success".to_string()),
+    })
+}
+
+async fn error_handler() -> impl IntoResponse {
+    AppError::InternalServerError.into_response()
+}
+
+async fn handler_404() -> impl IntoResponse {
+    AppError::NotFound.into_response()
 }
 
 // Example of a handler using state
