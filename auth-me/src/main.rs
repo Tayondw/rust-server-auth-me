@@ -1,19 +1,21 @@
 use axum::{
+    extract::{ Json, State },
+    http::{ HeaderName, HeaderValue, Method, StatusCode },
+    middleware::from_fn,
+    response::{ IntoResponse, Response },
     routing::{ get, post },
     Router,
-    extract::{ Json, State },
-    http::{ HeaderValue, Method, StatusCode, HeaderName },
-    response::{ Response, IntoResponse },
 };
+
 use diesel::prelude::*;
 use diesel::r2d2::{ ConnectionManager, Pool };
-use std::{ collections::HashMap, env, net::SocketAddr, sync::Arc };
+use std::{ collections::HashMap, net::SocketAddr, sync::Arc };
 use serde::{ Deserialize, Serialize };
-use tower_http::{ cors::CorsLayer , trace::TraceLayer };
+use tower_http::{ cors::CorsLayer, trace::TraceLayer };
 use dotenvy::dotenv;
 use tracing::{ info, error, warn, debug };
 use thiserror::Error;
-
+use std::error::Error as StdError;
 
 mod db;
 mod config;
@@ -26,7 +28,7 @@ pub mod models;
 pub mod schema;
 mod middleware;
 
-use middleware::csrf;
+use middleware::csrf::csrf_middleware;
 
 // Define AppState to hold shared state
 // create a struct to represent the state for a web application using a PostgreSQL database connection pool
@@ -43,7 +45,7 @@ pub struct AppState {
 type AppStateShare = Arc<AppState>;
 
 #[tokio::main] // used to make main async
-async fn main() {
+async fn main() -> Result<(), Box<dyn StdError>>{
     // Load .env file
     dotenv().ok();
     env_logger::init();
@@ -86,7 +88,7 @@ async fn main() {
     // Configure CORS based on environment
     let cors = if environment == "production" {
         CorsLayer::new()
-            .allow_origin("https://your-production-domain.com".parse::<HeaderValue>().unwrap())
+            .allow_origin("https://your-production-domain.com".parse::<HeaderValue>()?)
             .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
             .allow_headers([
                 HeaderName::from_static("content-type"),
@@ -96,7 +98,7 @@ async fn main() {
     } else {
         // Development CORS settings
         CorsLayer::new()
-            .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
+            .allow_origin("http://localhost:5173".parse::<HeaderValue>()?)
             .allow_methods([
                 Method::GET,
                 Method::POST,
@@ -121,7 +123,8 @@ async fn main() {
         .fallback(handler_404)
         .layer(TraceLayer::new_for_http())
         .with_state(shared_state)
-        .layer(cors); // Add the CORS middleware here
+        .layer(cors) // Add the CORS middleware here
+        .layer(from_fn(csrf_middleware));
 
     // Run the server
     // socket address are made up of IP address and port
@@ -130,8 +133,10 @@ async fn main() {
     let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
     println!("Server running on http://{}", addr);
 
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app.into_make_service()).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app.into_make_service()).await?;
+
+    Ok(())
 }
 
 // Request and Response Models
