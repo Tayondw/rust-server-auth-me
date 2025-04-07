@@ -29,6 +29,7 @@ pub mod schema;
 mod middleware;
 
 use middleware::csrf::csrf_middleware;
+use middleware::cors::create_cors_layer;
 
 // Define AppState to hold shared state
 // create a struct to represent the state for a web application using a PostgreSQL database connection pool
@@ -52,7 +53,7 @@ async fn main() -> Result<(), Box<dyn StdError>>{
 
     // Access environment variables
     // Handle error properly
-    let config = match Config::new().await {
+    let config: Config = match Config::new().await {
         Ok(cfg) => cfg,
         Err(e) => {
             eprintln!("Failed to load configuration: {}", e);
@@ -63,13 +64,13 @@ async fn main() -> Result<(), Box<dyn StdError>>{
     // Set up connection pool
     // ConnectionManager is a wrapper around a connection pool
     // it handles PostgreSQL connections
-    let manager = ConnectionManager::<PgConnection>::new(&config.database.database_url);
-    let pool = Pool::builder().build(manager).expect("Failed to create pool");
+    let manager: ConnectionManager<PgConnection> = ConnectionManager::<PgConnection>::new(&config.database.database_url);
+    let pool: Pool<ConnectionManager<PgConnection>> = Pool::builder().build(manager).expect("Failed to create pool");
 
     // Create shared state
     // Make the application state safely shareable across multiple threads
     // each thread has its own copy of the state
-    let shared_state = Arc::new(AppState {
+    let shared_state: Arc<AppState> = Arc::new(AppState {
         db_pool: pool,
     });
 
@@ -79,43 +80,17 @@ async fn main() -> Result<(), Box<dyn StdError>>{
     tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).try_init().ok(); // Avoids panicking if already set
 
     // Get environment
-    let environment = std::env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string());
+    let environment: String = std::env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string());
 
     // Set up CORS middleware
     // CORS middleware is a middleware that allows you to configure cross-origin resource sharing (CORS)
     // it allows you to specify which origins are allowed to make requests to your server
     // Enable CORS
     // Configure CORS based on environment
-    let cors = if environment == "production" {
-        CorsLayer::new()
-            .allow_origin("https://your-production-domain.com".parse::<HeaderValue>()?)
-            .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
-            .allow_headers([
-                HeaderName::from_static("content-type"),
-                HeaderName::from_static("authorization"),
-            ])
-            .allow_credentials(true)
-    } else {
-        // Development CORS settings
-        CorsLayer::new()
-            .allow_origin("http://localhost:5173".parse::<HeaderValue>()?)
-            .allow_methods([
-                Method::GET,
-                Method::POST,
-                Method::PATCH,
-                Method::DELETE,
-                Method::OPTIONS,
-            ])
-            .allow_headers([
-                HeaderName::from_static("content-type"),
-                HeaderName::from_static("authorization"),
-                HeaderName::from_static("x-csrf-token"),
-            ])
-            .allow_credentials(true)
-    };
+    let cors: CorsLayer = create_cors_layer(&environment);
 
     // Build our application with routes
-    let app = Router::new()
+    let app: Router = Router::new()
         .route("/", get(root))
         .route("/health", get(health_check))
         .route("/test", post(test_handler))
@@ -130,10 +105,10 @@ async fn main() -> Result<(), Box<dyn StdError>>{
     // socket address are made up of IP address and port
     // brackets are used to indicate that ipv4 is used
     // the port are the last 4 digits
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
+    let addr: SocketAddr = SocketAddr::from(([127, 0, 0, 1], 8080));
     println!("Server running on http://{}", addr);
 
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let listener: tokio::net::TcpListener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app.into_make_service()).await?;
 
     Ok(())
@@ -204,7 +179,7 @@ async fn handler_404() -> impl IntoResponse {
 }
 
 // Example of a handler using state
-async fn root(State(state): State<AppStateShare>) -> &'static str {
+async fn root(State(_state): State<AppStateShare>) -> &'static str {
     // You can now use state.db_pool to get a connection when needed
     "Hello, World!"
 }
