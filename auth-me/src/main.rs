@@ -31,6 +31,7 @@ mod middleware;
 use middleware::csrf::csrf_middleware;
 use middleware::cors::create_cors_layer;
 use middleware::cookies::{ cookie_layer, protected_route };
+use middleware::security_headers::security_headers;
 
 // Define AppState to hold shared state
 // create a struct to represent the state for a web application using a PostgreSQL database connection pool
@@ -104,11 +105,12 @@ async fn main() -> Result<(), Box<dyn StdError>> {
         .route("/protected", get(protected_route))
         .route("/error", get(error_handler))
         .fallback(handler_404)
-        .layer(TraceLayer::new_for_http())
         .with_state(shared_state)
-        .layer(cors) // Add the CORS middleware here
         .layer(cookie_layer())
-        .layer(from_fn(csrf_middleware));
+        .layer(from_fn(csrf_middleware))
+        .layer(from_fn(security_headers))
+        .layer(cors) // Add the CORS middleware here
+        .layer(TraceLayer::new_for_http());
 
     // Run the server
     // socket address are made up of IP address and port
