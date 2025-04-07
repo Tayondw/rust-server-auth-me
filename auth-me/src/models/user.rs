@@ -2,7 +2,7 @@ use diesel::prelude::*;
 use serde::{ Deserialize, Serialize };
 use crate::schema::users;
 
-#[derive(Queryable, Serialize)]
+#[derive(Queryable, Serialize, Debug, Selectable)]
 #[diesel(table_name = users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct User {
@@ -13,7 +13,7 @@ pub struct User {
     pub password: String,
 }
 
-#[derive(Insertable, Deserialize)]
+#[derive(Insertable, Deserialize, Debug)]
 #[diesel(table_name = users)]
 pub struct NewUser {
     pub name: String,
@@ -22,7 +22,7 @@ pub struct NewUser {
     pub password: String,
 }
 
-#[derive(AsChangeset,Deserialize)]
+#[derive(AsChangeset,Deserialize, Debug)]
 #[diesel(table_name = users)]
 pub struct UpdateUser {
     pub name: Option<String>,

@@ -17,9 +17,7 @@ use tracing::{ info, error, warn, debug };
 use thiserror::Error;
 use std::error::Error as StdError;
 
-mod db;
 mod config;
-
 use config::Config;
 
 // #[macro_use]
@@ -33,6 +31,8 @@ use middleware::cors::create_cors_layer;
 use middleware::cookies::{ cookie_layer, protected_route };
 use middleware::security_headers::security_headers;
 
+mod routes;
+use routes::{user_routes, auth_routes, health_routes};
 // Define AppState to hold shared state
 // create a struct to represent the state for a web application using a PostgreSQL database connection pool
 pub struct AppState {
