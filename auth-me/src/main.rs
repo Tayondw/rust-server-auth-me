@@ -1,8 +1,8 @@
 use axum::{
     extract::{ Json, State },
-    http::{ HeaderName, HeaderValue, Method, StatusCode },
+    http::{ HeaderName, HeaderValue, Method, StatusCode, header },
     middleware::from_fn,
-    response::{ IntoResponse, Response },
+    response::{ IntoResponse, Response, AppendHeaders },
     routing::{ get, post },
     Router,
 };
@@ -30,6 +30,7 @@ mod middleware;
 
 use middleware::csrf::csrf_middleware;
 use middleware::cors::create_cors_layer;
+use middleware::cookies::{ cookie_layer, protected_route };
 
 // Define AppState to hold shared state
 // create a struct to represent the state for a web application using a PostgreSQL database connection pool
@@ -46,7 +47,7 @@ pub struct AppState {
 type AppStateShare = Arc<AppState>;
 
 #[tokio::main] // used to make main async
-async fn main() -> Result<(), Box<dyn StdError>>{
+async fn main() -> Result<(), Box<dyn StdError>> {
     // Load .env file
     dotenv().ok();
     env_logger::init();
@@ -64,8 +65,12 @@ async fn main() -> Result<(), Box<dyn StdError>>{
     // Set up connection pool
     // ConnectionManager is a wrapper around a connection pool
     // it handles PostgreSQL connections
-    let manager: ConnectionManager<PgConnection> = ConnectionManager::<PgConnection>::new(&config.database.database_url);
-    let pool: Pool<ConnectionManager<PgConnection>> = Pool::builder().build(manager).expect("Failed to create pool");
+    let manager: ConnectionManager<PgConnection> = ConnectionManager::<PgConnection>::new(
+        &config.database.database_url
+    );
+    let pool: Pool<ConnectionManager<PgConnection>> = Pool::builder()
+        .build(manager)
+        .expect("Failed to create pool");
 
     // Create shared state
     // Make the application state safely shareable across multiple threads
@@ -80,7 +85,9 @@ async fn main() -> Result<(), Box<dyn StdError>>{
     tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).try_init().ok(); // Avoids panicking if already set
 
     // Get environment
-    let environment: String = std::env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string());
+    let environment: String = std::env
+        ::var("ENVIRONMENT")
+        .unwrap_or_else(|_| "development".to_string());
 
     // Set up CORS middleware
     // CORS middleware is a middleware that allows you to configure cross-origin resource sharing (CORS)
@@ -95,10 +102,12 @@ async fn main() -> Result<(), Box<dyn StdError>>{
         .route("/health", get(health_check))
         .route("/test", post(test_handler))
         .route("/error", get(error_handler))
+        .route("/protected", get(protected_route))
         .fallback(handler_404)
         .layer(TraceLayer::new_for_http())
         .with_state(shared_state)
         .layer(cors) // Add the CORS middleware here
+        .layer(cookie_layer())
         .layer(from_fn(csrf_middleware));
 
     // Run the server
