@@ -47,17 +47,17 @@ fn is_unsafe_method(method: &Method) -> bool {
 
 /// Generate a new CSRF token
 fn generate_token() -> String {
-    use rand::{thread_rng, Rng};
+    use rand::{rng, Rng};
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
                             abcdefghijklmnopqrstuvwxyz\
                             0123456789";
     const TOKEN_LEN: usize = 32;
 
-    let mut rng = thread_rng();
+    let mut rng = rng();
 
     let token: String = (0..TOKEN_LEN)
         .map(|_| {
-            let idx = rng.gen_range(0..CHARSET.len());
+            let idx = rng.random_range(0..CHARSET.len());
             CHARSET[idx] as char
         })
         .collect();
