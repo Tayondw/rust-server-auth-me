@@ -12,7 +12,6 @@ pub fn set_jwt_cookie(cookies: &Cookies, token: &str) {
     cookies.add(cookie);
 }
 
-
 /// Retrieves JWT from cookie
 pub fn get_jwt_cookie(cookies: &Cookies) -> Option<String> {
     cookies.get("jwt").map(|c| c.value().to_string())
