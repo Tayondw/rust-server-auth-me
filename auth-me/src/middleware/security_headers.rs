@@ -1,5 +1,4 @@
 use axum::{ http::{ HeaderValue, Request }, response::Response, middleware::Next, body::Body };
-use tower::ServiceExt;
 
 pub async fn security_headers(request: Request<Body>, next: Next) -> Response {
     let mut response = next.run(request).await;
