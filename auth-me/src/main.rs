@@ -24,6 +24,7 @@ use config::Config;
 extern crate diesel;
 pub mod models;
 pub mod schema;
+pub mod database;
 mod middleware;
 
 use middleware::csrf::csrf_middleware;
@@ -32,7 +33,33 @@ use middleware::cookies::{ cookie_layer, protected_route };
 use middleware::security_headers::security_headers;
 
 mod routes;
-use routes::{user_routes, auth_routes, health_routes};
+
+pub fn seed_database() -> Result<(), Box<dyn std::error::Error>> {
+    use diesel::prelude::*;
+    use dotenvy::dotenv;
+    use std::env;
+    use crate::database::seeders::DatabaseSeeder;
+
+    dotenv().ok();
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+
+    let mut conn = PgConnection::establish(&database_url).expect("Error connecting to database");
+
+    let conn_static = Box::leak(Box::new(conn));
+
+    let mut seeder = DatabaseSeeder::new(conn_static);
+
+    match seeder.run() {
+        Ok(_) => println!("Database seeded successfully!"),
+        Err(e) => {
+            eprintln!("Error seeding database: {}", e);
+            return Err(Box::new(e));
+        }
+    }
+
+    Ok(())
+}
+// use routes::{user_routes, auth_routes, health_routes};
 // Define AppState to hold shared state
 // create a struct to represent the state for a web application using a PostgreSQL database connection pool
 pub struct AppState {
@@ -121,6 +148,15 @@ async fn main() -> Result<(), Box<dyn StdError>> {
 
     let listener: tokio::net::TcpListener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app.into_make_service()).await?;
+
+    // To run the seeder, you can either:
+    // 1. Call it directly:
+    // seed_database().unwrap();
+    
+    // 2. Or use a command-line argument to determine when to seed:
+    if std::env::args().any(|arg| arg == "--seed") {
+        seed_database().unwrap();
+    }
 
     Ok(())
 }
