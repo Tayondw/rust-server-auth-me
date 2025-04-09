@@ -1,4 +1,3 @@
-// src/db/seeders/database.rs
 use diesel::prelude::*;
 use super::users::seed_users;
 

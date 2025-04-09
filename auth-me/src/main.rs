@@ -29,7 +29,7 @@ mod middleware;
 
 use middleware::csrf::csrf_middleware;
 use middleware::cors::create_cors_layer;
-use middleware::cookies::{ cookie_layer, protected_route };
+use middleware::cookies::{ cookie_layer, protected_route, test_get_jwt, test_set_jwt };
 use middleware::security_headers::security_headers;
 
 mod routes;
@@ -129,6 +129,8 @@ async fn main() -> Result<(), Box<dyn StdError>> {
         .route("/", get(root))
         .route("/health", get(health_check))
         .route("/test", post(test_handler))
+        .route("/test/set-jwt", get(test_set_jwt))
+        .route("/test/get-jwt", get(test_get_jwt))
         .route("/protected", get(protected_route))
         .route("/error", get(error_handler))
         .fallback(handler_404)
@@ -152,7 +154,7 @@ async fn main() -> Result<(), Box<dyn StdError>> {
     // To run the seeder, you can either:
     // 1. Call it directly:
     // seed_database().unwrap();
-    
+
     // 2. Or use a command-line argument to determine when to seed:
     if std::env::args().any(|arg| arg == "--seed") {
         seed_database().unwrap();
