@@ -1,5 +1,5 @@
 use axum::{
-    extract::{ Json, State },
+    extract::{ Json, State, Extension },
     http::StatusCode,
     middleware::from_fn,
     response::{ IntoResponse, Response },
@@ -27,7 +27,7 @@ pub mod schema;
 pub mod database;
 mod middleware;
 
-use middleware::csrf::csrf_middleware;
+use middleware::csrf::{ csrf_middleware, TokenStore };
 use middleware::cors::create_cors_layer;
 use middleware::cookies::{ cookie_layer, protected_route, test_get_jwt, test_set_jwt };
 use middleware::security_headers::security_headers;
@@ -124,6 +124,10 @@ async fn main() -> Result<(), Box<dyn StdError>> {
     // Configure CORS based on environment
     let cors: CorsLayer = create_cors_layer(&environment);
 
+    // Create token store
+    let token_store = Arc::new(TokenStore::new());
+    let token_store_layer = Extension(token_store);
+
     // Build our application with routes
     let app: Router = Router::new()
         .route("/", get(root))
@@ -135,10 +139,11 @@ async fn main() -> Result<(), Box<dyn StdError>> {
         .route("/error", get(error_handler))
         .fallback(handler_404)
         .with_state(shared_state)
-        .layer(cookie_layer())
-        .layer(from_fn(csrf_middleware))
-        .layer(from_fn(security_headers))
         .layer(cors) // Add the CORS middleware here
+        .layer(from_fn(csrf_middleware))
+        .layer(token_store_layer)
+        .layer(cookie_layer())
+        .layer(from_fn(security_headers))
         .layer(TraceLayer::new_for_http());
 
     // Run the server

@@ -318,6 +318,7 @@ dependencies = [
  "aws-sdk-s3",
  "axum",
  "axum-macros",
+ "base64 0.22.1",
  "bcrypt",
  "cargo-watch",
  "chrono",
@@ -330,6 +331,7 @@ dependencies = [
  "jsonwebtoken",
  "log",
  "rand 0.9.0",
+ "ring",
  "serde",
  "serde_json",
  "thiserror 2.0.12",
@@ -1488,6 +1490,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28cfac68e08048ae1883171632c2aef3ebc555621ae56fbccce1cbf22dd7f058"
 dependencies = [
  "powerfmt",
+ "serde",
 ]
 
 [[package]]
