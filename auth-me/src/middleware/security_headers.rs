@@ -1,9 +1,9 @@
 use axum::{ http::{ HeaderValue, Request }, response::Response, middleware::Next, body::Body };
 
 pub async fn security_headers(request: Request<Body>, next: Next) -> Response {
-    let mut response = next.run(request).await;
+    let mut response: axum::http::Response<Body> = next.run(request).await;
 
-    let headers = response.headers_mut();
+    let headers: &mut axum::http::HeaderMap = response.headers_mut();
 
     headers.insert("X-DNS-Prefetch-Control", HeaderValue::from_static("off"));
     headers.insert("X-Frame-Options", HeaderValue::from_static("DENY"));
@@ -22,9 +22,9 @@ pub async fn security_headers(request: Request<Body>, next: Next) -> Response {
         )
     );
 
-    let environment = std::env::var("ENVIRONMENT").unwrap_or_else(|_| "development".into());
+    let environment: String = std::env::var("ENVIRONMENT").unwrap_or_else(|_| "development".into());
 
-    let csp = if environment == "production" {
+    let csp: &str = if environment == "production" {
         // 🚨 Strict CSP - disallows inline scripts/styles, no 3rd party
         "default-src 'self'; \
          script-src 'self'; \

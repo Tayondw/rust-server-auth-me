@@ -1,7 +1,7 @@
 use axum::{
     middleware::Next,
     response::{ Response, IntoResponse, Html, Json },
-    http::{ Request, StatusCode, HeaderValue, HeaderMap, Method },
+    http::{ Request, StatusCode, HeaderValue, Method },
     body::Body,
     extract::Extension,
 };
@@ -68,16 +68,16 @@ impl TokenStore {
     }
 
     pub async fn validate_token(&self, token: &str) -> bool {
-        let tokens = self.tokens.read().await;
+        let tokens: tokio::sync::RwLockReadGuard<'_, HashMap<String, TokenData>> = self.tokens.read().await;
         tokens
             .get(token)
-            .map(|data| data.is_valid())
+            .map(|data: &TokenData| data.is_valid())
             .unwrap_or(false)
     }
 
     // Added cleanup method
     pub async fn cleanup_expired(&self) {
-        let mut tokens = self.tokens.write().await;
+        let mut tokens: tokio::sync::RwLockWriteGuard<'_, HashMap<String, TokenData>> = self.tokens.write().await;
         tokens.retain(|_, data| data.is_valid());
     }
 }
@@ -88,25 +88,13 @@ impl Default for TokenStore {
     }
 }
 
-// Security headers function
-fn add_security_headers(response: &mut Response) {
-    let headers = response.headers_mut();
-    headers.insert(
-        "Strict-Transport-Security",
-        HeaderValue::from_static("max-age=31536000; includeSubDomains")
-    );
-    headers.insert("X-Frame-Options", HeaderValue::from_static("SAMEORIGIN"));
-    headers.insert("X-Content-Type-Options", HeaderValue::from_static("nosniff"));
-    headers.insert("X-XSS-Protection", HeaderValue::from_static("1; mode=block"));
-}
-
 pub async fn csrf_middleware(
     Extension(token_store): Extension<Arc<TokenStore>>, // Changed to Extension
     request: Request<Body>,
     next: Next
 ) -> Result<Response, StatusCode> {
     if is_unsafe_method(request.method()) {
-        let token = request
+        let token: &str = request
             .headers()
             .get("X-CSRF-Token")
             .and_then(|t| t.to_str().ok())
@@ -117,7 +105,7 @@ pub async fn csrf_middleware(
         }
     }
 
-    let mut response = next.run(request).await;
+    let mut response: axum::http::Response<Body> = next.run(request).await;
 
     // Generate and store new token
     let token_data = TokenData::new();
@@ -129,15 +117,12 @@ pub async fn csrf_middleware(
         response.headers_mut().insert("X-CSRF-Token", header_value);
     }
 
-    // Add security headers
-    add_security_headers(&mut response);
-
     Ok(response)
 }
 
 // Test endpoints
 pub async fn test_csrf_get() -> impl IntoResponse {
-    let html = Html(
+    let html: Html<&str> = Html(
         r#"
         <!DOCTYPE html>
         <html>
@@ -209,8 +194,8 @@ pub async fn test_csrf_post() -> impl IntoResponse {
 }
 
 pub async fn debug_csrf(request: Request<Body>) -> impl IntoResponse {
-    let headers = request.headers();
-    let csrf_header = headers
+    let headers: &axum::http::HeaderMap = request.headers();
+    let csrf_header: &str = headers
         .get("X-CSRF-Token")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("No CSRF header");
