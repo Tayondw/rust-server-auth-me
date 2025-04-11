@@ -41,13 +41,13 @@ pub fn seed_database() -> Result<(), Box<dyn std::error::Error>> {
     use crate::database::seeders::DatabaseSeeder;
 
     dotenv().ok();
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let database_url: String = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    let mut conn = PgConnection::establish(&database_url).expect("Error connecting to database");
+    let mut conn: PgConnection = PgConnection::establish(&database_url).expect("Error connecting to database");
 
-    let conn_static = Box::leak(Box::new(conn));
+    let conn_static: &mut PgConnection = Box::leak(Box::new(conn));
 
-    let mut seeder = DatabaseSeeder::new(conn_static);
+    let mut seeder: DatabaseSeeder = DatabaseSeeder::new(conn_static);
 
     match seeder.run() {
         Ok(_) => println!("Database seeded successfully!"),
@@ -125,8 +125,8 @@ async fn main() -> Result<(), Box<dyn StdError>> {
     let cors: CorsLayer = create_cors_layer(&environment);
 
     // Create token store
-    let token_store = Arc::new(TokenStore::new());
-    let token_store_layer = Extension(token_store);
+    let token_store: Arc<TokenStore> = Arc::new(TokenStore::new());
+    let token_store_layer: Extension<Arc<TokenStore>> = Extension(token_store);
 
     // Build our application with routes
     let app: Router = Router::new()
@@ -161,7 +161,7 @@ async fn main() -> Result<(), Box<dyn StdError>> {
     // seed_database().unwrap();
 
     // 2. Or use a command-line argument to determine when to seed:
-    if std::env::args().any(|arg| arg == "--seed") {
+    if std::env::args().any(|arg: String| arg == "--seed") {
         seed_database().unwrap();
     }
 
@@ -195,13 +195,13 @@ enum AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let status_code = match self {
+        let status_code: StatusCode = match self {
             AppError::NotFound => StatusCode::NOT_FOUND,
             AppError::ValidationError(_) => StatusCode::BAD_REQUEST,
             AppError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
-        let mut response_body =
+        let mut response_body: serde_json::Value =
             serde_json::json!({
             "success": false,
             "message": self.to_string(),
