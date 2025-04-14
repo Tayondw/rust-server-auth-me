@@ -5,7 +5,7 @@ use crate::{
     models::{ NewUser, UpdateUser, User },
     schema::users::{ self, id, password, username },
     AppState,
-    database::operations::users::create_user,
+    database::operations::users::{create_user, update_user},
 };
 use serde::{ Deserialize, Serialize };
 
@@ -85,4 +85,69 @@ pub async fn create_user_handler(
             )
         })
         .map(Json)
+}
+
+#[derive(serde::Deserialize)]
+pub struct UpdateUserRequest {
+    email: String,
+    name: String,
+    username: String,
+    password: String,
+}
+
+pub async fn update_user_handler(
+    State(state): State<Arc<AppState>>,
+    Path(user_id): Path<i32>,
+    Json(user_data): Json<UpdateUserRequest>,
+) -> Result<Json<User>, (StatusCode, Json<ErrorResponse>)> {
+    let mut conn = state.db_pool.get()
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    message: format!("Database connection error: {}", e)
+                })
+            )
+        })?;
+
+    // Check if user exists first
+    if !users::table
+        .filter(users::id.eq(user_id))
+        .select(users::id)
+        .first::<i32>(&mut conn)
+        .optional()
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    message: format!("Database error: {}", e)
+                })
+            )
+        })?
+        .is_some() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                message: "User not found".to_string()
+            })
+        ));
+    }
+
+    update_user(
+        &mut conn,
+        user_id,
+        user_data.email,
+        user_data.name,
+        user_data.username,
+        user_data.password,
+    )
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                message: format!("Failed to update user: {}", e)
+            })
+        )
+    })
+    .map(Json)
 }

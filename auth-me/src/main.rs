@@ -3,7 +3,7 @@ use axum::{
     http::StatusCode,
     middleware::from_fn,
     response::{ IntoResponse, Response },
-    routing::{ get, post },
+    routing::{ get, post, patch },
     Router,
 };
 
@@ -34,7 +34,7 @@ use middleware::cookies::{ cookie_layer, protected_route, test_get_jwt, test_set
 use middleware::security_headers::security_headers;
 
 mod routes;
-use routes::api::users::{user_routes, create_user_handler};
+use routes::api::users::{ user_routes, create_user_handler, update_user_handler };
 
 pub fn seed_database() -> Result<(), Box<dyn std::error::Error>> {
     use diesel::prelude::*;
@@ -142,6 +142,7 @@ async fn main() -> Result<(), Box<dyn StdError>> {
         .route("/test/get-jwt", get(test_get_jwt))
         .route("/protected", get(protected_route))
         .route("/users", post(create_user_handler))
+        .route("/users/{id}", patch(update_user_handler))
         .route("/csrf-token", get(get_csrf_token))
         .route("/error", get(error_handler))
         .fallback(handler_404)
