@@ -61,14 +61,20 @@ impl TokenStore {
     }
 
     pub async fn store_token(&self, token_data: TokenData) {
-        let mut tokens: tokio::sync::RwLockWriteGuard<'_, HashMap<String, TokenData>> = self.tokens.write().await;
+        let mut tokens: tokio::sync::RwLockWriteGuard<
+            '_,
+            HashMap<String, TokenData>
+        > = self.tokens.write().await;
         tokens.insert(token_data.token.clone(), token_data);
         // Clean up expired tokens
         tokens.retain(|_, data: &mut TokenData| data.is_valid());
     }
 
     pub async fn validate_token(&self, token: &str) -> bool {
-        let tokens: tokio::sync::RwLockReadGuard<'_, HashMap<String, TokenData>> = self.tokens.read().await;
+        let tokens: tokio::sync::RwLockReadGuard<
+            '_,
+            HashMap<String, TokenData>
+        > = self.tokens.read().await;
         tokens
             .get(token)
             .map(|data: &TokenData| data.is_valid())
@@ -77,7 +83,10 @@ impl TokenStore {
 
     // Added cleanup method
     pub async fn cleanup_expired(&self) {
-        let mut tokens: tokio::sync::RwLockWriteGuard<'_, HashMap<String, TokenData>> = self.tokens.write().await;
+        let mut tokens: tokio::sync::RwLockWriteGuard<
+            '_,
+            HashMap<String, TokenData>
+        > = self.tokens.write().await;
         tokens.retain(|_, data: &mut TokenData| data.is_valid());
     }
 }

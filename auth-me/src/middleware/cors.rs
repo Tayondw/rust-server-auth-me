@@ -1,4 +1,4 @@
-use axum::http::{HeaderName, HeaderValue, Method};
+use axum::http::{ HeaderName, HeaderValue, Method };
 use tower_http::cors::CorsLayer;
 
 pub fn create_cors_layer(environment: &str) -> CorsLayer {

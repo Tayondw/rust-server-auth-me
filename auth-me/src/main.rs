@@ -16,6 +16,7 @@ use dotenvy::dotenv;
 use tracing::{ info, error, warn, debug };
 use thiserror::Error;
 use std::error::Error as StdError;
+use tracing_subscriber;
 
 mod config;
 use config::Config;
