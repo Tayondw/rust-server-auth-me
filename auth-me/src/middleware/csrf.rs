@@ -60,6 +60,13 @@ impl TokenStore {
         }
     }
 
+    pub async fn generate_token(&self) -> String {
+        let token_data = TokenData::new();
+        let token = token_data.token.clone();
+        self.store_token(token_data).await;
+        token
+    }
+
     pub async fn store_token(&self, token_data: TokenData) {
         let mut tokens: tokio::sync::RwLockWriteGuard<
             '_,
@@ -215,4 +222,13 @@ pub async fn debug_csrf(request: Request<Body>) -> impl IntoResponse {
         "method": request.method().as_str(),
     })
     )
+}
+
+pub async fn get_csrf_token(Extension(
+    token_store,
+): Extension<Arc<TokenStore>>) -> impl IntoResponse {
+    let token = token_store.generate_token().await;
+    let mut map = HashMap::new();
+    map.insert("csrf_token".to_string(), token);
+    Json(map)
 }

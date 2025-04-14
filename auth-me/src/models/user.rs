@@ -1,6 +1,8 @@
 use diesel::prelude::*;
 use serde::{ Deserialize, Serialize };
 use crate::schema::users;
+use chrono::{NaiveDateTime, DateTime, Utc};
+
 
 #[derive(Queryable, Serialize, Debug, Selectable)]
 #[diesel(table_name = users)]
@@ -11,6 +13,8 @@ pub struct User {
     pub username: String,
     pub email: String,
     pub password: String,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Insertable, Deserialize, Debug)]

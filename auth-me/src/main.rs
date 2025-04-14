@@ -28,12 +28,13 @@ pub mod schema;
 pub mod database;
 mod middleware;
 
-use middleware::csrf::{ csrf_middleware, TokenStore };
+use middleware::csrf::{ csrf_middleware, TokenStore, get_csrf_token };
 use middleware::cors::create_cors_layer;
 use middleware::cookies::{ cookie_layer, protected_route, test_get_jwt, test_set_jwt };
 use middleware::security_headers::security_headers;
 
 mod routes;
+use routes::api::users::{user_routes, create_user_handler};
 
 pub fn seed_database() -> Result<(), Box<dyn std::error::Error>> {
     use diesel::prelude::*;
@@ -44,7 +45,9 @@ pub fn seed_database() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
     let database_url: String = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    let mut conn: PgConnection = PgConnection::establish(&database_url).expect("Error connecting to database");
+    let mut conn: PgConnection = PgConnection::establish(&database_url).expect(
+        "Error connecting to database"
+    );
 
     let conn_static: &mut PgConnection = Box::leak(Box::new(conn));
 
@@ -131,18 +134,21 @@ async fn main() -> Result<(), Box<dyn StdError>> {
 
     // Build our application with routes
     let app: Router = Router::new()
+        .merge(user_routes())
         .route("/", get(root))
         .route("/health", get(health_check))
         .route("/test", post(test_handler))
         .route("/test/set-jwt", get(test_set_jwt))
         .route("/test/get-jwt", get(test_get_jwt))
         .route("/protected", get(protected_route))
+        .route("/users", post(create_user_handler))
+        .route("/csrf-token", get(get_csrf_token))
         .route("/error", get(error_handler))
         .fallback(handler_404)
         .with_state(shared_state)
-        .layer(cors) // Add the CORS middleware here
         .layer(from_fn(csrf_middleware))
         .layer(token_store_layer)
+        .layer(cors) // Add the CORS middleware here
         .layer(cookie_layer())
         .layer(from_fn(security_headers))
         .layer(TraceLayer::new_for_http());

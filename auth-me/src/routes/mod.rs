@@ -1,7 +1,3 @@
-mod auth;
-mod users;
-mod health;
-
-pub use auth::*;
-pub use users::*;
-pub use health::*;
+pub mod auth;
+pub mod health;
+pub mod api;

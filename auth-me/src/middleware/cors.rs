@@ -25,7 +25,9 @@ pub fn create_cors_layer(environment: &str) -> CorsLayer {
                 HeaderName::from_static("content-type"),
                 HeaderName::from_static("authorization"),
                 HeaderName::from_static("accept"),
+                HeaderName::from_static("x-csrf-token"), // <-- Add this line
             ])
+
             .allow_credentials(true)
     }
 }
