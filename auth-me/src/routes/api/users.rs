@@ -11,7 +11,7 @@ use crate::{
     models::User,
     schema::users::{ self, id, password, username },
     AppState,
-    database::operations::users::{ create_user, update_user },
+    database::operations::users::{ create_user, update_user, delete_user },
 };
 use serde::{ Deserialize, Serialize };
 
@@ -22,11 +22,12 @@ pub struct ErrorResponse {
 
 // USER ROUTER
 pub fn user_routes() -> Router<Arc<AppState>> {
-    Router::new().route("/users", get(get_users).post(create_user_handler)).route(
-        "/users/{id}",
-        patch(update_user_handler).get(get_user_by_id)
-        // .delete(delete_user)
-    )
+    Router::new()
+        .route("/users", get(get_users).post(create_user_handler))
+        .route(
+            "/users/{id}",
+            patch(update_user_handler).get(get_user_by_id).delete(delete_user_handler)
+        )
 }
 
 // GET ALL USERS
@@ -194,3 +195,36 @@ pub async fn update_user_handler(
 }
 
 // DELETE USER BY ID
+pub async fn delete_user_handler(
+    State(state): State<Arc<AppState>>,
+    Path(user_id): Path<i32>
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    let mut conn: diesel::r2d2::PooledConnection<diesel::r2d2::ConnectionManager<PgConnection>> = state.db_pool
+        .get()
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    message: format!("Database connection error: {}", e),
+                }),
+            )
+        })?;
+
+    match delete_user(&mut conn, user_id).await {
+        Ok(_) => Ok(StatusCode::NO_CONTENT),
+        Err(diesel::result::Error::NotFound) =>
+            Err((
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    message: format!("User with id {} not found", user_id),
+                }),
+            )),
+        Err(e) =>
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    message: format!("Failed to delete user: {}", e),
+                }),
+            )),
+    }
+}

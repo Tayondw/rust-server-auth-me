@@ -3,7 +3,7 @@ use axum::{
     http::StatusCode,
     middleware::from_fn,
     response::{ IntoResponse, Response },
-    routing::{ get, post, patch },
+    routing::{ get, post},
     Router,
 };
 
@@ -34,35 +34,7 @@ use middleware::cookies::{ cookie_layer, protected_route, test_get_jwt, test_set
 use middleware::security_headers::security_headers;
 
 mod routes;
-use routes::api::users::{ user_routes, create_user_handler, update_user_handler };
-
-pub fn seed_database() -> Result<(), Box<dyn std::error::Error>> {
-    use diesel::prelude::*;
-    use dotenvy::dotenv;
-    use std::env;
-    use crate::database::seeders::DatabaseSeeder;
-
-    dotenv().ok();
-    let database_url: String = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-
-    let mut conn: PgConnection = PgConnection::establish(&database_url).expect(
-        "Error connecting to database"
-    );
-
-    let conn_static: &mut PgConnection = Box::leak(Box::new(conn));
-
-    let mut seeder: DatabaseSeeder = DatabaseSeeder::new(conn_static);
-
-    match seeder.run() {
-        Ok(_) => println!("Database seeded successfully!"),
-        Err(e) => {
-            eprintln!("Error seeding database: {}", e);
-            return Err(Box::new(e));
-        }
-    }
-
-    Ok(())
-}
+use routes::api::users::user_routes;
 // use routes::{user_routes, auth_routes, health_routes};
 // Define AppState to hold shared state
 // create a struct to represent the state for a web application using a PostgreSQL database connection pool
@@ -135,7 +107,6 @@ async fn main() -> Result<(), Box<dyn StdError>> {
 
     // Build our application with routes
     let app: Router = Router::new()
-      //   .merge(user_routes())
         .route("/", get(root))
         .route("/health", get(health_check))
         .route("/test", post(test_handler))
@@ -163,15 +134,6 @@ async fn main() -> Result<(), Box<dyn StdError>> {
 
     let listener: tokio::net::TcpListener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app.into_make_service()).await?;
-
-    // To run the seeder, you can either:
-    // 1. Call it directly:
-    // seed_database().unwrap();
-
-    // 2. Or use a command-line argument to determine when to seed:
-    if std::env::args().any(|arg: String| arg == "--seed") {
-        seed_database().unwrap();
-    }
 
     Ok(())
 }

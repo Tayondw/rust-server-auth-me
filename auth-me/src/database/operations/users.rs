@@ -3,6 +3,7 @@ use bcrypt::{ hash, DEFAULT_COST };
 use crate::models::{ User, NewUser, UpdateUser };
 use crate::schema::users;
 
+// CREATE USER
 pub fn create_user(
     conn: &mut PgConnection,
     email: String,
@@ -24,6 +25,7 @@ pub fn create_user(
     Ok(user)
 }
 
+// UPDATE USER
 pub fn update_user(
     conn: &mut PgConnection,
     user_id: i32,
@@ -32,7 +34,9 @@ pub fn update_user(
     username: Option<String>,
     password: Option<String>
 ) -> Result<User, Box<dyn std::error::Error>> {
-    let password: Option<String> = password.map(|pwd: String| hash(pwd.as_bytes(), DEFAULT_COST)).transpose()?;
+    let password: Option<String> = password
+        .map(|pwd: String| hash(pwd.as_bytes(), DEFAULT_COST))
+        .transpose()?;
 
     let update_user: UpdateUser = UpdateUser {
         email,
@@ -48,4 +52,16 @@ pub fn update_user(
         .get_result(conn)?;
 
     Ok(updated_user)
+}
+
+// DELETE USER
+pub async fn delete_user(
+    conn: &mut PgConnection,
+    user_id: i32
+) -> Result<(), diesel::result::Error> {
+    use crate::schema::users::dsl::*;
+
+    diesel::delete(users.find(user_id)).execute(conn)?;
+
+    Ok(())
 }
