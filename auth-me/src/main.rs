@@ -115,6 +115,7 @@ async fn main() -> Result<(), Box<dyn StdError>> {
     // tracing is a framework for instrumenting applications
     // it provides a set of abstractions for logging, tracing, and metrics
     tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).try_init().ok(); // Avoids panicking if already set
+    tracing::info!("Hello from main!");
 
     // Get environment
     let environment: String = std::env
@@ -134,15 +135,14 @@ async fn main() -> Result<(), Box<dyn StdError>> {
 
     // Build our application with routes
     let app: Router = Router::new()
-        .merge(user_routes())
+      //   .merge(user_routes())
         .route("/", get(root))
         .route("/health", get(health_check))
         .route("/test", post(test_handler))
         .route("/test/set-jwt", get(test_set_jwt))
         .route("/test/get-jwt", get(test_get_jwt))
         .route("/protected", get(protected_route))
-        .route("/users", post(create_user_handler))
-        .route("/users/{id}", patch(update_user_handler))
+        .merge(user_routes())
         .route("/csrf-token", get(get_csrf_token))
         .route("/error", get(error_handler))
         .fallback(handler_404)

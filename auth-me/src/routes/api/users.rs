@@ -1,11 +1,17 @@
 use std::sync::Arc;
-use axum::{ extract::{ State, Path }, routing::{ get, post }, Router, Json, http::StatusCode };
+use axum::{
+    extract::{ State, Path },
+    routing::{ get, post, patch },
+    Router,
+    Json,
+    http::StatusCode,
+};
 use diesel::prelude::*;
 use crate::{
-    models::{ NewUser, UpdateUser, User },
+    models::User,
     schema::users::{ self, id, password, username },
     AppState,
-    database::operations::users::{create_user, update_user},
+    database::operations::users::{ create_user, update_user },
 };
 use serde::{ Deserialize, Serialize };
 
@@ -14,11 +20,16 @@ pub struct ErrorResponse {
     message: String,
 }
 
+// USER ROUTER
 pub fn user_routes() -> Router<Arc<AppState>> {
-    Router::new().route("/users", get(get_users))
-    //   .route("/users/{id}", get(get_user))
+    Router::new().route("/users", get(get_users).post(create_user_handler)).route(
+        "/users/{id}",
+        patch(update_user_handler).get(get_user_by_id)
+        // .delete(delete_user)
+    )
 }
 
+// GET ALL USERS
 pub async fn get_users(State(state): State<Arc<AppState>>) -> Result<
     Json<Vec<User>>,
     (StatusCode, Json<ErrorResponse>)
@@ -54,6 +65,51 @@ pub async fn get_users(State(state): State<Arc<AppState>>) -> Result<
     }
 }
 
+// GET USER BY ID
+pub async fn get_user_by_id(
+    State(state): State<Arc<AppState>>,
+    Path(user_id): Path<i32>
+) -> Result<Json<User>, (StatusCode, Json<ErrorResponse>)> {
+    let mut conn = state.db_pool.get().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                message: format!("Database connection error: {}", e),
+            }),
+        )
+    })?;
+
+    // Query the database for the user
+    let user_result = users::table
+        .find(user_id) // Using find for primary key lookup
+        .select(User::as_select())
+        .first(&mut *conn)
+        .map_err(|e| {
+            match e {
+                diesel::result::Error::NotFound =>
+                    (
+                        StatusCode::NOT_FOUND,
+                        Json(ErrorResponse {
+                            message: format!("User with id {} not found", user_id),
+                        }),
+                    ),
+                _ =>
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ErrorResponse {
+                            message: format!("Database error: {}", e),
+                        }),
+                    ),
+            }
+        });
+
+    match user_result {
+        Ok(user) => Ok(Json(user)),
+        Err(e) => Err(e),
+    }
+}
+
+// CREATE NEW USER
 #[derive(serde::Deserialize)]
 pub struct CreateUserRequest {
     name: String,
@@ -66,14 +122,16 @@ pub async fn create_user_handler(
     State(state): State<Arc<AppState>>,
     Json(user_data): Json<CreateUserRequest>
 ) -> Result<Json<User>, (StatusCode, Json<ErrorResponse>)> {
-    let mut conn = state.db_pool.get().map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                message: format!("Database connection error: {}", e),
-            }),
-        )
-    })?;
+    let mut conn: diesel::r2d2::PooledConnection<diesel::r2d2::ConnectionManager<PgConnection>> = state.db_pool
+        .get()
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    message: format!("Database connection error: {}", e),
+                }),
+            )
+        })?;
 
     create_user(&mut conn, user_data.email, user_data.name, user_data.username, user_data.password)
         .map_err(|e| {
@@ -87,67 +145,52 @@ pub async fn create_user_handler(
         .map(Json)
 }
 
+// UPDATE USER BY ID
 #[derive(serde::Deserialize)]
 pub struct UpdateUserRequest {
-    email: String,
-    name: String,
-    username: String,
-    password: String,
+    #[serde(default)] // This makes the field optional in JSON
+    email: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    username: Option<String>,
+    #[serde(default)]
+    password: Option<String>,
 }
 
 pub async fn update_user_handler(
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<i32>,
-    Json(user_data): Json<UpdateUserRequest>,
+    Json(update_data): Json<UpdateUserRequest>
 ) -> Result<Json<User>, (StatusCode, Json<ErrorResponse>)> {
-    let mut conn = state.db_pool.get()
+    let mut conn: diesel::r2d2::PooledConnection<diesel::r2d2::ConnectionManager<PgConnection>> = state.db_pool
+        .get()
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {
-                    message: format!("Database connection error: {}", e)
-                })
+                    message: format!("Database connection error: {}", e),
+                }),
             )
         })?;
-
-    // Check if user exists first
-    if !users::table
-        .filter(users::id.eq(user_id))
-        .select(users::id)
-        .first::<i32>(&mut conn)
-        .optional()
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    message: format!("Database error: {}", e)
-                })
-            )
-        })?
-        .is_some() {
-        return Err((
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                message: "User not found".to_string()
-            })
-        ));
-    }
 
     update_user(
         &mut conn,
         user_id,
-        user_data.email,
-        user_data.name,
-        user_data.username,
-        user_data.password,
+        update_data.email,
+        update_data.name,
+        update_data.username,
+        update_data.password
     )
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                message: format!("Failed to update user: {}", e)
-            })
-        )
-    })
-    .map(Json)
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    message: format!("Failed to update user: {}", e),
+                }),
+            )
+        })
+        .map(Json)
 }
+
+// DELETE USER BY ID
