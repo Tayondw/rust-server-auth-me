@@ -6,6 +6,7 @@ use thiserror::Error;
 pub struct DatabaseConfig {
     pub database_url: String,
     pub jwt_secret: String,
+    pub jwt_refresh_secret: String,
     pub rust_log: String,
     pub schema: String,
     pub jwt_expires_in: String
@@ -26,6 +27,9 @@ impl DatabaseConfig {
                 .map_err(|_| ConfigError::Other("DATABASE_URL must be set".to_string()))?,
             jwt_secret: env
                 ::var("JWT_SECRET")
+                .map_err(|_| ConfigError::Other("JWT_SECRET must be set".to_string()))?,
+            jwt_refresh_secret: env
+                ::var("JWT_REFRESH_SECRET")
                 .map_err(|_| ConfigError::Other("JWT_SECRET must be set".to_string()))?,
             rust_log: env
                 ::var("RUST_LOG")

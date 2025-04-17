@@ -1,83 +1,89 @@
 use tower_cookies::{ CookieManagerLayer, Cookies, Cookie };
-use axum::{ response::IntoResponse, Json };
-use serde_json::json;
+use time::Duration;
+use cookie::SameSite;
 
-/// Adds a signed cookie
-pub fn set_jwt_cookie(cookies: &Cookies, token: &str) {
-    let mut cookie: Cookie<'_> = Cookie::new("jwt", token.to_string());
-    cookie.set_path("/");
-    cookie.set_http_only(true);
-    cookie.set_secure(true);
-
-    cookies.add(cookie);
-}
-
-/// Retrieves JWT from cookie
-pub fn get_jwt_cookie(cookies: &Cookies) -> Option<String> {
-    cookies.get("jwt").map(|c: Cookie<'_>| c.value().to_string())
-}
-
-/// Example protected route using the jwt cookie
-pub async fn protected_route(cookies: Cookies) -> impl IntoResponse {
-    match get_jwt_cookie(&cookies) {
-        Some(token) =>
-            Json(
-                json!({
-            "success": true,
-            "token": token
-        })
-            ).into_response(),
-
-        None =>
-            Json(
-                json!({
-            "success": false,
-            "message": "Unauthorized"
-        })
-            ).into_response(),
-    }
-}
+const ACCESS_COOKIE_NAME: &'static str = "access_token";
+const REFRESH_COOKIE_NAME: &'static str = "refresh_token";
 
 /// Expose cookie middleware layer
 pub fn cookie_layer() -> CookieManagerLayer {
     CookieManagerLayer::new()
 }
 
-// Test route to set JWT cookie
-pub async fn test_set_jwt(cookies: Cookies) -> impl IntoResponse {
-    // Create a sample JWT token - in production this would be properly generated
-    let test_token: &str =
-        "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
-
-    // Set the JWT cookie
-    set_jwt_cookie(&cookies, test_token);
-
-    // Return a response we can see in the browser
-    Json(
-        json!({
-        "message": "JWT cookie is set",
-        "status": "success",
-        "test_token": test_token
-    })
-    )
+pub struct TokenCookieOptions {
+    pub http_only: bool,
+    pub secure: bool,
+    pub same_site: SameSite,
+    pub path: String,
+    pub max_age: Option<Duration>,
 }
 
-// Test route to verify JWT cookie
-pub async fn test_get_jwt(cookies: Cookies) -> impl IntoResponse {
-    match get_jwt_cookie(&cookies) {
-        Some(token) =>
-            Json(
-                json!({
-            "message": "JWT cookie found",
-            "token": token
-        })
-            ),
-        None =>
-            Json(
-                json!({
-            "message": "No JWT cookie found",
-            "token": null
-        })
-            ),
+impl Default for TokenCookieOptions {
+    fn default() -> Self {
+        Self {
+            http_only: true,
+            secure: true,
+            same_site: SameSite::Strict,
+            path: "/".to_string(),
+            max_age: None,
+        }
     }
+}
+
+pub fn set_token_cookie(
+    cookies: &Cookies,
+    name: String, // Take ownership of the name
+    token: String, // Take ownership of the token
+    options: TokenCookieOptions
+) {
+    let mut cookie = Cookie::new(name, token);
+    cookie.set_http_only(options.http_only);
+    cookie.set_secure(options.secure);
+    cookie.set_same_site(options.same_site);
+    cookie.set_path(options.path);
+
+    if let Some(max_age) = options.max_age {
+        cookie.set_max_age(max_age);
+    }
+
+    cookies.add(cookie);
+}
+
+pub fn set_access_token(cookies: &Cookies, token: String) {
+    let options = TokenCookieOptions {
+        path: "/api".to_string(),
+        max_age: Some(Duration::minutes(15)),
+        ..Default::default()
+    };
+    set_token_cookie(cookies, ACCESS_COOKIE_NAME.to_string(), token, options);
+}
+
+pub fn set_refresh_token(cookies: &Cookies, token: String) {
+    let options = TokenCookieOptions {
+        path: "/api/auth/refresh".to_string(),
+        max_age: Some(Duration::days(7)),
+        ..Default::default()
+    };
+    set_token_cookie(cookies, REFRESH_COOKIE_NAME.to_string(), token, options);
+}
+
+pub fn get_access_token(cookies: &Cookies) -> Option<String> {
+    cookies.get(ACCESS_COOKIE_NAME).map(|c| c.value().to_string())
+}
+
+pub fn get_refresh_token(cookies: &Cookies) -> Option<String> {
+    cookies.get(REFRESH_COOKIE_NAME).map(|c| c.value().to_string())
+}
+
+pub fn remove_auth_cookies(cookies: &Cookies) {
+    let mut access_cookie = Cookie::new(ACCESS_COOKIE_NAME, "");
+    access_cookie.set_path("/api");
+    access_cookie.set_max_age(Duration::seconds(0));
+
+    let mut refresh_cookie = Cookie::new(REFRESH_COOKIE_NAME, "");
+    refresh_cookie.set_path("/api/auth/refresh");
+    refresh_cookie.set_max_age(Duration::seconds(0));
+
+    cookies.add(access_cookie);
+    cookies.add(refresh_cookie);
 }

@@ -1,10 +1,10 @@
 use diesel::prelude::*;
 use serde::{ Deserialize, Serialize };
 use crate::schema::users;
-use chrono::{NaiveDateTime, DateTime, Utc};
+use chrono;
 
 
-#[derive(Queryable, Serialize, Debug, Selectable)]
+#[derive(Queryable, Serialize, Debug, Selectable, Identifiable)]
 #[diesel(table_name = users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct User {

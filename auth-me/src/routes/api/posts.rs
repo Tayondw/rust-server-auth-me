@@ -1,6 +1,6 @@
-use std::sync::Arc;
+use std::{ sync::Arc, collections::HashMap };
 use axum::{
-    extract::{ State, Path },
+    extract::{ State, Path, Query },
     routing::{ get, post, patch },
     Router,
     Json,
@@ -11,13 +11,13 @@ use crate::{
     models::Post,
     schema::posts::{ self, id, title, content },
     AppState,
-    database::operations::posts::{ create_post, update_post, delete_post },
+    database::operations::posts::{ get_posts_by_user, create_post, update_post, delete_post },
 };
 use serde::{ Deserialize, Serialize };
 
 #[derive(Serialize)]
 pub struct ErrorResponse {
-    message: String,
+    pub message: String,
 }
 
 // POST ROUTER
@@ -28,6 +28,7 @@ pub fn post_routes() -> Router<Arc<AppState>> {
             "/posts/{id}",
             patch(update_post_handler).get(get_post_by_id).delete(delete_post_handler)
         )
+        .route("/posts/user/{user_id}", get(get_posts_by_user_handler))
 }
 
 // GET ALL POSTS
@@ -110,37 +111,68 @@ pub async fn get_post_by_id(
     }
 }
 
+// GET POSTS BY USER
+#[derive(Deserialize)]
+pub struct PostQuery {
+    limit: Option<i64>,
+    offset: Option<i64>,
+    sort: Option<String>,
+}
+
+pub async fn get_posts_by_user_handler(
+    State(state): State<Arc<AppState>>,
+    Path(user): Path<i32>,
+    Query(query): Query<PostQuery>
+) -> Result<Json<Vec<Post>>, (StatusCode, Json<ErrorResponse>)> {
+    let mut conn = state.db_pool.get().map_err(|e| (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorResponse {
+            message: format!("Database connection error: {}", e),
+        }),
+    ))?;
+
+    let limit = query.limit.unwrap_or(10);
+    let offset = query.offset.unwrap_or(0);
+    let sort_order = query.sort.clone(); // asc or desc
+
+    match get_posts_by_user(&mut conn, user, limit, offset, sort_order) {
+        Ok(posts) => Ok(Json(posts)),
+        Err(e) =>
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    message: format!("Error fetching posts for user {}: {}", user, e),
+                }),
+            )),
+    }
+}
+
 // CREATE NEW POST
 #[derive(serde::Deserialize)]
 pub struct CreatePostRequest {
     title: String,
     content: String,
+    user_id: i32,
 }
 
 pub async fn create_post_handler(
     State(state): State<Arc<AppState>>,
     Json(post_data): Json<CreatePostRequest>
 ) -> Result<Json<Post>, (StatusCode, Json<ErrorResponse>)> {
-    let mut conn: diesel::r2d2::PooledConnection<diesel::r2d2::ConnectionManager<PgConnection>> = state.db_pool
-        .get()
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    message: format!("Database connection error: {}", e),
-                }),
-            )
-        })?;
+    let mut conn = state.db_pool.get().map_err(|e| (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorResponse {
+            message: format!("Database connection error: {}", e),
+        }),
+    ))?;
 
-    create_post(&mut conn, post_data.title, post_data.content)
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    message: format!("Failed to create post: {}", e),
-                }),
-            )
-        })
+    create_post(&mut conn, post_data.title, post_data.content, post_data.user_id)
+        .map_err(|e| (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                message: format!("Failed to create post: {}", e),
+            }),
+        ))
         .map(Json)
 }
 

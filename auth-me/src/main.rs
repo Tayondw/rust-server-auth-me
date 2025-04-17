@@ -14,6 +14,7 @@ mod models;
 mod schema;
 mod database;
 mod middleware;
+mod auth;
 mod routes;
 mod errors;
 
@@ -21,10 +22,11 @@ use config::Config;
 use middleware::{
     csrf::{ csrf_middleware, TokenStore, get_csrf_token },
     cors::create_cors_layer,
-    cookies::{ cookie_layer, protected_route, test_get_jwt, test_set_jwt },
+    cookies::cookie_layer,
     security_headers::security_headers,
 };
-use routes::{ api::{users::user_routes, posts::post_routes}, general::general_routes };
+use routes::{ api::{ users::user_routes, posts::post_routes }, general::general_routes };
+use auth::router::authentication_routes;
 
 pub struct AppState {
     pub db_pool: Pool<ConnectionManager<PgConnection>>,
@@ -61,12 +63,10 @@ async fn main() -> Result<(), Box<dyn StdError>> {
     let token_store: Arc<TokenStore> = Arc::new(TokenStore::new());
 
     let app: Router = Router::new()
-        .route("/test/set-jwt", get(test_set_jwt))
-        .route("/test/get-jwt", get(test_get_jwt))
-        .route("/protected", get(protected_route))
         .merge(user_routes())
         .merge(post_routes())
         .merge(general_routes())
+        .nest("/auth", authentication_routes())
         .route("/csrf-token", get(get_csrf_token))
         .with_state(shared_state)
         .layer(from_fn(csrf_middleware))
