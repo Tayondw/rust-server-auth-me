@@ -24,7 +24,7 @@ use middleware::{
     cookies::{ cookie_layer, protected_route, test_get_jwt, test_set_jwt },
     security_headers::security_headers,
 };
-use routes::{ api::users::user_routes, general::general_routes };
+use routes::{ api::{users::user_routes, posts::post_routes}, general::general_routes };
 
 pub struct AppState {
     pub db_pool: Pool<ConnectionManager<PgConnection>>,
@@ -65,6 +65,7 @@ async fn main() -> Result<(), Box<dyn StdError>> {
         .route("/test/get-jwt", get(test_get_jwt))
         .route("/protected", get(protected_route))
         .merge(user_routes())
+        .merge(post_routes())
         .merge(general_routes())
         .route("/csrf-token", get(get_csrf_token))
         .with_state(shared_state)

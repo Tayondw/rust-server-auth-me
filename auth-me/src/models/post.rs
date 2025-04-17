@@ -9,6 +9,8 @@ pub struct Post {
     pub id: i32,
     pub title: String,
     pub content: String,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
 }
 
 #[derive(Insertable, Deserialize, Clone)]
