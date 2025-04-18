@@ -8,7 +8,8 @@ use std::sync::Arc;
 use crate::{
     auth::services::AuthService, config::{self, Config}, middleware::cookies::{
         get_refresh_token, remove_auth_cookies, set_access_token, set_refresh_token
-    }
+    },
+    models::User
 };
 
 #[derive(Deserialize)]
