@@ -2,7 +2,7 @@ use serde::Deserialize;
 use std::env;
 use thiserror::Error;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct DatabaseConfig {
     pub database_url: String,
     pub jwt_secret: String,

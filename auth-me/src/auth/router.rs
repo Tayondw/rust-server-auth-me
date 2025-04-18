@@ -10,10 +10,11 @@ use crate::{
     },
     middleware::cookies::cookie_layer,
     AppState,
+    config::Config
 };
 
-pub fn authentication_routes() -> Router<Arc<AppState>> {
-    let authentication_service: Arc<AuthService> = Arc::new(AuthService::new());
+pub fn authentication_routes(config: &Config) -> Router<Arc<AppState>> {
+    let authentication_service: Arc<AuthService> = Arc::new(AuthService::new(config));
 
     // Create protected routes
     let protected_routes = Router::new()

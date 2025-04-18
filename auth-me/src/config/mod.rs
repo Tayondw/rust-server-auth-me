@@ -4,7 +4,7 @@ pub mod database;
 // use aws::AwsConfig;
 use database::{ DatabaseConfig, ConfigError };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
 //     pub aws: AwsConfig,
     pub database: DatabaseConfig,

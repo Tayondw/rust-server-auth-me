@@ -1,10 +1,12 @@
 use tower_cookies::{ CookieManagerLayer, Cookies, Cookie };
 use time::Duration;
 use cookie::SameSite;
-use std::env;
+use crate::config::Config;
 
 const ACCESS_COOKIE_NAME: &'static str = "access_token";
 const REFRESH_COOKIE_NAME: &'static str = "refresh_token";
+const DEFAULT_ACCESS_TOKEN_EXPIRES: i64 = 900; // 15 minutes in seconds
+const DEFAULT_REFRESH_TOKEN_EXPIRES: i64 = 604800; // 7 days in seconds
 
 /// Expose cookie middleware layer
 pub fn cookie_layer() -> CookieManagerLayer {
@@ -50,19 +52,31 @@ pub fn set_token_cookie(
     cookies.add(cookie);
 }
 
-pub fn set_access_token(cookies: &Cookies, token: String) {
+pub fn set_access_token(cookies: &Cookies, token: String, config: &Config) {
+    let expires_in = if config.database.jwt_expires_in <= 0 {
+        DEFAULT_ACCESS_TOKEN_EXPIRES
+    } else {
+        config.database.jwt_expires_in
+    };
+
     let options = TokenCookieOptions {
         path: "/api".to_string(),
-        max_age: Some(Duration::minutes(15)),
+        max_age: Some(Duration::seconds(expires_in)),
         ..Default::default()
     };
     set_token_cookie(cookies, ACCESS_COOKIE_NAME.to_string(), token, options);
 }
 
-pub fn set_refresh_token(cookies: &Cookies, token: String) {
+pub fn set_refresh_token(cookies: &Cookies, token: String, config: &Config) {
+    let expires_in = if config.database.jwt_refresh_expires_in <= 0 {
+        DEFAULT_REFRESH_TOKEN_EXPIRES
+    } else {
+        config.database.jwt_refresh_expires_in
+    };
+
     let options = TokenCookieOptions {
         path: "/api/auth/refresh".to_string(),
-        max_age: Some(Duration::days(7)),
+        max_age: Some(Duration::seconds(expires_in)),
         ..Default::default()
     };
     set_token_cookie(cookies, REFRESH_COOKIE_NAME.to_string(), token, options);

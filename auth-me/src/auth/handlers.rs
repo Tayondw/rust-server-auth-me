@@ -1,4 +1,4 @@
-use axum::{ extract::State, response::IntoResponse, Json, http::StatusCode };
+use axum::{ extract::State, response::IntoResponse, Json, http::StatusCode, Extension };
 use axum_macros::debug_handler;
 use tower_cookies::Cookies;
 use serde::Deserialize;
@@ -6,13 +6,9 @@ use serde_json::json;
 use std::sync::Arc;
 
 use crate::{
-    auth::services::AuthService,
-    middleware::cookies::{
-        set_access_token,
-        set_refresh_token,
-        remove_auth_cookies,
-        get_refresh_token,
-    },
+    auth::services::AuthService, config::{self, Config}, middleware::cookies::{
+        get_refresh_token, remove_auth_cookies, set_access_token, set_refresh_token
+    }
 };
 
 #[derive(Deserialize)]
@@ -24,6 +20,7 @@ pub struct LoginRequest {
 pub async fn login_handler(
     State(auth_service): State<Arc<AuthService>>,
     cookies: Cookies,
+    config: Extension<Config>,
     Json(credentials): Json<LoginRequest>
 ) -> impl IntoResponse {
     let user_id = "user123".to_string();
@@ -32,8 +29,8 @@ pub async fn login_handler(
         Ok(access_token) => {
             match auth_service.generate_refresh_token(&user_id) {
                 Ok(refresh_token) => {
-                    set_access_token(&cookies, access_token);
-                    set_refresh_token(&cookies, refresh_token);
+                    set_access_token(&cookies, access_token, &config);
+                    set_refresh_token(&cookies, refresh_token, &config);
 
                     (
                         StatusCode::OK,
@@ -73,7 +70,8 @@ pub async fn login_handler(
 #[debug_handler]
 pub async fn refresh_token_handler(
     State(auth_service): State<Arc<AuthService>>,
-    cookies: Cookies
+    cookies: Cookies,
+    config: Extension<Config>
 ) -> impl IntoResponse {
     match get_refresh_token(&cookies) {
         Some(refresh_token) => {
@@ -81,7 +79,7 @@ pub async fn refresh_token_handler(
                 Ok(claims) => {
                     match auth_service.generate_access_token(&claims.sub) {
                         Ok(new_access_token) => {
-                            set_access_token(&cookies, new_access_token);
+                            set_access_token(&cookies, new_access_token, &config);
                             (
                                 StatusCode::OK,
                                 Json(

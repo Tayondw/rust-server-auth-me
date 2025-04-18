@@ -66,7 +66,7 @@ async fn main() -> Result<(), Box<dyn StdError>> {
         .merge(user_routes())
         .merge(post_routes())
         .merge(general_routes())
-        .nest("/auth", authentication_routes())
+        .nest("/auth", authentication_routes(&config))
         .route("/csrf-token", get(get_csrf_token))
         .with_state(shared_state)
         .layer(from_fn(csrf_middleware))
