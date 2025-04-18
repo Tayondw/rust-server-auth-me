@@ -9,7 +9,8 @@ pub struct DatabaseConfig {
     pub jwt_refresh_secret: String,
     pub rust_log: String,
     pub schema: String,
-    pub jwt_expires_in: String
+    pub jwt_expires_in: i64,
+    pub jwt_refresh_expires_in: i64,
 }
 
 #[derive(Error, Debug)]
@@ -36,7 +37,18 @@ impl DatabaseConfig {
                 .map_err(|_| ConfigError::Other("RUST_LOG must be set".to_string()))?,
             jwt_expires_in: env
                 ::var("JWT_EXPIRES_IN")
-                .map_err(|_| ConfigError::Other("JWT_EXPIRES_IN must be set".to_string()))?,
+                .map_err(|_| ConfigError::Other("JWT_EXPIRES_IN must be set".to_string()))?
+                .parse()
+                .map_err(|_|
+                    ConfigError::Other("JWT_EXPIRES_IN must be a valid number".to_string())
+                )?,
+            jwt_refresh_expires_in: env
+                ::var("JWT_REFRESH_EXPIRES_IN")
+                .map_err(|_| ConfigError::Other("JWT_REFRESH_EXPIRES_IN must be set".to_string()))?
+                .parse()
+                .map_err(|_|
+                    ConfigError::Other("JWT_REFRESH_EXPIRES_IN must be a valid number".to_string())
+                )?,
             schema: env
                 ::var("SCHEMA")
                 .map_err(|_| ConfigError::Other("SCHEMA must be set".to_string()))?,

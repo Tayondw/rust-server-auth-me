@@ -13,7 +13,7 @@ use crate::{
 };
 
 pub fn authentication_routes() -> Router<Arc<AppState>> {
-    let authentication_service = Arc::new(AuthService::new());
+    let authentication_service: Arc<AuthService> = Arc::new(AuthService::new());
 
     // Create protected routes
     let protected_routes = Router::new()

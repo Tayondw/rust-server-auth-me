@@ -32,8 +32,8 @@ impl AuthService {
         &self,
         user_id: &str
     ) -> Result<String, jsonwebtoken::errors::Error> {
-        let now = OffsetDateTime::now_utc();
-        let claims = TokenClaims {
+        let now: OffsetDateTime = OffsetDateTime::now_utc();
+        let claims: TokenClaims = TokenClaims {
             sub: user_id.to_string(),
             exp: (now + Duration::minutes(15)).unix_timestamp(),
             iat: now.unix_timestamp(),
@@ -51,8 +51,8 @@ impl AuthService {
         &self,
         user_id: &str
     ) -> Result<String, jsonwebtoken::errors::Error> {
-        let now = OffsetDateTime::now_utc();
-        let claims = TokenClaims {
+        let now: OffsetDateTime = OffsetDateTime::now_utc();
+        let claims: TokenClaims = TokenClaims {
             sub: user_id.to_string(),
             exp: (now + Duration::days(7)).unix_timestamp(),
             iat: now.unix_timestamp(),
@@ -70,8 +70,8 @@ impl AuthService {
         &self,
         token: &str
     ) -> Result<TokenClaims, jsonwebtoken::errors::Error> {
-        let validation = Validation::new(Algorithm::HS256);
-        let token_data = decode::<TokenClaims>(
+        let validation: Validation = Validation::new(Algorithm::HS256);
+        let token_data: jsonwebtoken::TokenData<TokenClaims> = decode::<TokenClaims>(
             token,
             &DecodingKey::from_secret(self.access_secret.as_bytes()),
             &validation
@@ -83,8 +83,8 @@ impl AuthService {
         &self,
         token: &str
     ) -> Result<TokenClaims, jsonwebtoken::errors::Error> {
-        let validation = Validation::new(Algorithm::HS256);
-        let token_data = decode::<TokenClaims>(
+        let validation: Validation = Validation::new(Algorithm::HS256);
+        let token_data: jsonwebtoken::TokenData<TokenClaims> = decode::<TokenClaims>(
             token,
             &DecodingKey::from_secret(self.refresh_secret.as_bytes()),
             &validation

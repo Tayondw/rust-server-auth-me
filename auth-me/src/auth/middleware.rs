@@ -15,7 +15,7 @@ pub async fn auth_middleware(
     request: Request<Body>,
     next: Next
 ) -> Response {
-    let access_token = match get_access_token(&cookies) {
+    let access_token: String = match get_access_token(&cookies) {
         Some(token) => token,
         None => {
             return Response::builder()
