@@ -1,7 +1,7 @@
-use std::{ sync::Arc, collections::HashMap };
+use std::sync::Arc;
 use axum::{
     extract::{ State, Path, Query },
-    routing::{ get, post, patch },
+    routing::{ get, patch },
     Router,
     Json,
     http::StatusCode,
@@ -9,7 +9,7 @@ use axum::{
 use diesel::prelude::*;
 use crate::{
     models::Post,
-    schema::posts::{ self, id, title, content },
+    schema::posts::{ self },
     AppState,
     database::operations::posts::{ get_posts_by_user, create_post, update_post, delete_post },
 };

@@ -1,19 +1,13 @@
 use std::sync::Arc;
-use axum::{
-    extract::{ State, Path },
-    routing::{ get, post, patch },
-    Router,
-    Json,
-    http::StatusCode,
-};
+use axum::{ extract::{ State, Path }, routing::{ get, patch }, Router, Json, http::StatusCode };
 use diesel::prelude::*;
 use crate::{
     models::User,
-    schema::users::{ self, id, password, username },
+    schema::users::{ self },
     AppState,
     database::operations::users::{ create_user, update_user, delete_user },
 };
-use serde::{ Deserialize, Serialize };
+use serde::Serialize;
 
 #[derive(Serialize)]
 pub struct ErrorResponse {

@@ -1,11 +1,11 @@
-use axum::{ extract::Extension, middleware::from_fn, routing::{ get, post }, Router };
+use axum::{ extract::Extension, middleware::from_fn, routing:: get, Router };
 
 use diesel::prelude::*;
 use diesel::r2d2::{ ConnectionManager, Pool };
 use std::{ net::SocketAddr, sync::Arc };
 use tower_http::{ cors::CorsLayer, trace::TraceLayer };
 use dotenvy::dotenv;
-use tracing::{ info, error, warn, debug };
+use tracing::info;
 use std::error::Error as StdError;
 use tracing_subscriber;
 
@@ -48,6 +48,8 @@ async fn main() -> Result<(), Box<dyn StdError>> {
     let pool: Pool<ConnectionManager<PgConnection>> = Pool::builder()
         .build(manager)
         .expect("Failed to create pool");
+    // Clone pool for authentication service
+    let authentication_pool = pool.clone();
     let shared_state: Arc<AppState> = Arc::new(AppState {
         db_pool: pool,
     });
@@ -66,7 +68,7 @@ async fn main() -> Result<(), Box<dyn StdError>> {
         .merge(user_routes())
         .merge(post_routes())
         .merge(general_routes())
-        .nest("/auth", authentication_routes(&config))
+        .nest("/auth", authentication_routes(&config, authentication_pool))
         .route("/csrf-token", get(get_csrf_token))
         .with_state(shared_state)
         .layer(from_fn(csrf_middleware))
