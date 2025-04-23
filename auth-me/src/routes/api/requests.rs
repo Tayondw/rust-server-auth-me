@@ -1,4 +1,6 @@
 use serde::Deserialize;
+use std::collections::HashMap;
+use crate::errors::AppError;
 
 #[derive(Deserialize)]
 pub struct CreateUserRequest {
@@ -6,6 +8,29 @@ pub struct CreateUserRequest {
     pub username: String,
     pub email: String,
     pub password: String,
+}
+
+impl CreateUserRequest {
+    pub fn validate(&self) -> Result<(), AppError> {
+        let mut errors = HashMap::new();
+
+        if self.email.trim().is_empty() {
+            errors.insert("email".to_string(), "Email is required".to_string());
+        }
+
+        if self.password.len() < 6 {
+            errors.insert(
+                "password".to_string(),
+                "Password must be at least 6 characters".to_string()
+            );
+        }
+
+        if !errors.is_empty() {
+            return Err(AppError::ValidationError(errors));
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Deserialize)]

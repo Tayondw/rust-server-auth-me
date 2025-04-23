@@ -1,7 +1,6 @@
 use diesel::prelude::*;
 use bcrypt::{ hash, DEFAULT_COST };
-use crate::models::{ User, NewUser, UpdateUser };
-use crate::schema::users;
+use crate::{models::{ User, NewUser, UpdateUser }, schema::users};
 
 // CREATE USER
 pub fn create_user(
