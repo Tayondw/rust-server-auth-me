@@ -7,18 +7,18 @@ use axum::{
     http::StatusCode,
 };
 use diesel::prelude::*;
+
 use crate::{
     models::Post,
     schema::posts::{ self },
     AppState,
-    database::operations::posts::{ get_posts_by_user, create_post, update_post, delete_post },
+    ErrorResponse,
+    database::{
+        operations::posts::{ get_posts_by_user, create_post, update_post, delete_post },
+        DbConnExt,
+    },
+    routes::api::{ CreatePostRequest, UpdatePostRequest, PostQuery },
 };
-use serde::{ Deserialize, Serialize };
-
-#[derive(Serialize)]
-pub struct ErrorResponse {
-    pub message: String,
-}
 
 // POST ROUTER
 pub fn post_routes() -> Router<Arc<AppState>> {
@@ -36,17 +36,7 @@ pub async fn get_posts(State(state): State<Arc<AppState>>) -> Result<
     Json<Vec<Post>>,
     (StatusCode, Json<ErrorResponse>)
 > {
-    // Get a connection from the pool (no await needed for r2d2)
-    let mut conn: diesel::r2d2::PooledConnection<diesel::r2d2::ConnectionManager<PgConnection>> = state.db_pool
-        .get()
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    message: format!("Database connection error: {}", e),
-                }),
-            )
-        })?;
+    let mut conn = state.conn()?;
 
     // Execute the query (directly, no interact needed)
     let posts_result: Result<Vec<Post>, (StatusCode, Json<ErrorResponse>)> = posts::table
@@ -72,14 +62,7 @@ pub async fn get_post_by_id(
     State(state): State<Arc<AppState>>,
     Path(post_id): Path<i32>
 ) -> Result<Json<Post>, (StatusCode, Json<ErrorResponse>)> {
-    let mut conn = state.db_pool.get().map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                message: format!("Database connection error: {}", e),
-            }),
-        )
-    })?;
+    let mut conn = state.conn()?;
 
     // Query the database for the user
     let post_result = posts::table
@@ -112,24 +95,12 @@ pub async fn get_post_by_id(
 }
 
 // GET POSTS BY USER
-#[derive(Deserialize)]
-pub struct PostQuery {
-    limit: Option<i64>,
-    offset: Option<i64>,
-    sort: Option<String>,
-}
-
 pub async fn get_posts_by_user_handler(
     State(state): State<Arc<AppState>>,
     Path(user): Path<i32>,
     Query(query): Query<PostQuery>
 ) -> Result<Json<Vec<Post>>, (StatusCode, Json<ErrorResponse>)> {
-    let mut conn = state.db_pool.get().map_err(|e| (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ErrorResponse {
-            message: format!("Database connection error: {}", e),
-        }),
-    ))?;
+    let mut conn = state.conn()?;
 
     let limit = query.limit.unwrap_or(10);
     let offset = query.offset.unwrap_or(0);
@@ -148,23 +119,11 @@ pub async fn get_posts_by_user_handler(
 }
 
 // CREATE NEW POST
-#[derive(serde::Deserialize)]
-pub struct CreatePostRequest {
-    title: String,
-    content: String,
-    user_id: i32,
-}
-
 pub async fn create_post_handler(
     State(state): State<Arc<AppState>>,
     Json(post_data): Json<CreatePostRequest>
 ) -> Result<Json<Post>, (StatusCode, Json<ErrorResponse>)> {
-    let mut conn = state.db_pool.get().map_err(|e| (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ErrorResponse {
-            message: format!("Database connection error: {}", e),
-        }),
-    ))?;
+    let mut conn = state.conn()?;
 
     create_post(&mut conn, post_data.title, post_data.content, post_data.user_id)
         .map_err(|e| (
@@ -177,29 +136,12 @@ pub async fn create_post_handler(
 }
 
 // UPDATE POST BY ID
-#[derive(serde::Deserialize)]
-pub struct UpdatePostRequest {
-    #[serde(default)] // This makes the field optional in JSON
-    title: Option<String>,
-    #[serde(default)]
-    content: Option<String>,
-}
-
 pub async fn update_post_handler(
     State(state): State<Arc<AppState>>,
     Path(post_id): Path<i32>,
     Json(update_data): Json<UpdatePostRequest>
 ) -> Result<Json<Post>, (StatusCode, Json<ErrorResponse>)> {
-    let mut conn: diesel::r2d2::PooledConnection<diesel::r2d2::ConnectionManager<PgConnection>> = state.db_pool
-        .get()
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    message: format!("Database connection error: {}", e),
-                }),
-            )
-        })?;
+    let mut conn = state.conn()?;
 
     update_post(&mut conn, post_id, update_data.title, update_data.content)
         .map_err(|e| {
@@ -218,16 +160,7 @@ pub async fn delete_post_handler(
     State(state): State<Arc<AppState>>,
     Path(post_id): Path<i32>
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    let mut conn: diesel::r2d2::PooledConnection<diesel::r2d2::ConnectionManager<PgConnection>> = state.db_pool
-        .get()
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    message: format!("Database connection error: {}", e),
-                }),
-            )
-        })?;
+    let mut conn = state.conn()?;
 
     match delete_post(&mut conn, post_id).await {
         Ok(_) => Ok(StatusCode::NO_CONTENT),

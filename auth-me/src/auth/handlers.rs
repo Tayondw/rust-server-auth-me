@@ -1,11 +1,10 @@
-use axum::{ extract::State, response::IntoResponse, Json, http::StatusCode, Extension };
+use axum::{ extract::State, response::IntoResponse, Json, http::StatusCode };
 use tower_cookies::Cookies;
 use serde_json::json;
 use std::sync::Arc;
 
 use crate::{
     auth::services::AuthService,
-    config::Config,
     middleware::cookies::{
         get_refresh_token,
         remove_auth_cookies,
@@ -18,7 +17,6 @@ use crate::{
 pub async fn login_handler(
     State(auth_service): State<Arc<AuthService>>,
     cookies: Cookies,
-    config: Extension<Config>,
     Json(credentials): Json<LoginRequest>
 ) -> impl IntoResponse {
     match auth_service.validate_credentials(&credentials.username, &credentials.password).await {
@@ -28,8 +26,8 @@ pub async fn login_handler(
                 Ok(access_token) => {
                     match auth_service.generate_refresh_token(&user_id) {
                         Ok(refresh_token) => {
-                            set_access_token(&cookies, access_token, &config);
-                            set_refresh_token(&cookies, refresh_token, &config);
+                            set_access_token(&cookies, access_token, auth_service.config());
+                            set_refresh_token(&cookies, refresh_token, auth_service.config());
 
                             (
                                 StatusCode::OK,
@@ -86,8 +84,7 @@ pub async fn login_handler(
 
 pub async fn refresh_token_handler(
     State(auth_service): State<Arc<AuthService>>,
-    cookies: Cookies,
-    config: Extension<Config>
+    cookies: Cookies
 ) -> impl IntoResponse {
     match get_refresh_token(&cookies) {
         Some(refresh_token) => {
@@ -99,8 +96,16 @@ pub async fn refresh_token_handler(
                             match auth_service.generate_refresh_token(&claims.sub) {
                                 Ok(new_refresh_token) => {
                                     // Set both new tokens in cookies
-                                    set_access_token(&cookies, new_access_token, &config);
-                                    set_refresh_token(&cookies, new_refresh_token, &config);
+                                    set_access_token(
+                                        &cookies,
+                                        new_access_token,
+                                        auth_service.config()
+                                    );
+                                    set_refresh_token(
+                                        &cookies,
+                                        new_refresh_token,
+                                        auth_service.config()
+                                    );
 
                                     (
                                         StatusCode::OK,

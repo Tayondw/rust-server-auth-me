@@ -5,14 +5,10 @@ use crate::{
     models::User,
     schema::users::{ self },
     AppState,
-    database::operations::users::{ create_user, update_user, delete_user },
+    ErrorResponse,
+    database::{ operations::users::{ create_user, update_user, delete_user }, DbConnExt },
+    routes::api::{ CreateUserRequest, UpdateUserRequest },
 };
-use serde::Serialize;
-
-#[derive(Serialize)]
-pub struct ErrorResponse {
-    message: String,
-}
 
 // USER ROUTER
 pub fn user_routes() -> Router<Arc<AppState>> {
@@ -29,17 +25,7 @@ pub async fn get_users(State(state): State<Arc<AppState>>) -> Result<
     Json<Vec<User>>,
     (StatusCode, Json<ErrorResponse>)
 > {
-    // Get a connection from the pool (no await needed for r2d2)
-    let mut conn: diesel::r2d2::PooledConnection<diesel::r2d2::ConnectionManager<PgConnection>> = state.db_pool
-        .get()
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    message: format!("Database connection error: {}", e),
-                }),
-            )
-        })?;
+    let mut conn = state.conn()?;
 
     // Execute the query (directly, no interact needed)
     let users_result: Result<Vec<User>, (StatusCode, Json<ErrorResponse>)> = users::table
@@ -65,14 +51,7 @@ pub async fn get_user_by_id(
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<i32>
 ) -> Result<Json<User>, (StatusCode, Json<ErrorResponse>)> {
-    let mut conn = state.db_pool.get().map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                message: format!("Database connection error: {}", e),
-            }),
-        )
-    })?;
+    let mut conn = state.conn()?;
 
     // Query the database for the user
     let user_result = users::table
@@ -105,28 +84,11 @@ pub async fn get_user_by_id(
 }
 
 // CREATE NEW USER
-#[derive(serde::Deserialize)]
-pub struct CreateUserRequest {
-    name: String,
-    username: String,
-    email: String,
-    password: String,
-}
-
 pub async fn create_user_handler(
     State(state): State<Arc<AppState>>,
     Json(user_data): Json<CreateUserRequest>
 ) -> Result<Json<User>, (StatusCode, Json<ErrorResponse>)> {
-    let mut conn: diesel::r2d2::PooledConnection<diesel::r2d2::ConnectionManager<PgConnection>> = state.db_pool
-        .get()
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    message: format!("Database connection error: {}", e),
-                }),
-            )
-        })?;
+    let mut conn = state.conn()?;
 
     create_user(&mut conn, user_data.email, user_data.name, user_data.username, user_data.password)
         .map_err(|e| {
@@ -141,33 +103,12 @@ pub async fn create_user_handler(
 }
 
 // UPDATE USER BY ID
-#[derive(serde::Deserialize)]
-pub struct UpdateUserRequest {
-    #[serde(default)] // This makes the field optional in JSON
-    email: Option<String>,
-    #[serde(default)]
-    name: Option<String>,
-    #[serde(default)]
-    username: Option<String>,
-    #[serde(default)]
-    password: Option<String>,
-}
-
 pub async fn update_user_handler(
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<i32>,
     Json(update_data): Json<UpdateUserRequest>
 ) -> Result<Json<User>, (StatusCode, Json<ErrorResponse>)> {
-    let mut conn: diesel::r2d2::PooledConnection<diesel::r2d2::ConnectionManager<PgConnection>> = state.db_pool
-        .get()
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    message: format!("Database connection error: {}", e),
-                }),
-            )
-        })?;
+    let mut conn = state.conn()?;
 
     update_user(
         &mut conn,
@@ -193,16 +134,7 @@ pub async fn delete_user_handler(
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<i32>
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    let mut conn: diesel::r2d2::PooledConnection<diesel::r2d2::ConnectionManager<PgConnection>> = state.db_pool
-        .get()
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    message: format!("Database connection error: {}", e),
-                }),
-            )
-        })?;
+    let mut conn = state.conn()?;
 
     match delete_user(&mut conn, user_id).await {
         Ok(_) => Ok(StatusCode::NO_CONTENT),

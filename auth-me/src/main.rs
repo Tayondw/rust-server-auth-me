@@ -1,5 +1,4 @@
-use axum::{ extract::Extension, middleware::from_fn, routing:: get, Router };
-
+use axum::{ extract::Extension, middleware::from_fn, routing::get, Router };
 use diesel::prelude::*;
 use diesel::r2d2::{ ConnectionManager, Pool };
 use std::{ net::SocketAddr, sync::Arc };
@@ -8,6 +7,7 @@ use dotenvy::dotenv;
 use tracing::info;
 use std::error::Error as StdError;
 use tracing_subscriber;
+use serde::Serialize;
 
 mod config;
 mod models;
@@ -30,6 +30,11 @@ use auth::router::authentication_routes;
 
 pub struct AppState {
     pub db_pool: Pool<ConnectionManager<PgConnection>>,
+}
+
+#[derive(Serialize)]
+pub struct ErrorResponse {
+    pub message: String,
 }
 
 #[tokio::main]
