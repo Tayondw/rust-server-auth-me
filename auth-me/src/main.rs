@@ -1,6 +1,5 @@
 use axum::{ extract::Extension, middleware::from_fn, routing::get, Router };
-use diesel::prelude::*;
-use diesel::r2d2::{ ConnectionManager, Pool };
+use diesel::{prelude::*, r2d2::{ ConnectionManager, Pool }};
 use std::{ net::SocketAddr, sync::Arc };
 use tower_http::{ cors::CorsLayer, trace::TraceLayer };
 use dotenvy::dotenv;
