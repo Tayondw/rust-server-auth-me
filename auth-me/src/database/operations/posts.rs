@@ -1,6 +1,5 @@
 use diesel::prelude::*;
-use crate::models::{ Post, NewPost, UpdatePost };
-use crate::schema::posts::{ self };
+use crate::{models::{ Post, NewPost, UpdatePost }, schema::posts::{self}};
 
 // GET POST BY USER
 pub fn get_posts_by_user(

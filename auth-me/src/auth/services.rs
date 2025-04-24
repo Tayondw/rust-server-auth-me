@@ -2,9 +2,8 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 use serde::{ Deserialize, Serialize };
 use time::{ OffsetDateTime, Duration };
 use uuid::Uuid;
-use diesel::prelude::*;
 use bcrypt::verify;
-use diesel::{ PgConnection, r2d2::{ Pool, ConnectionManager } };
+use diesel::{ PgConnection, r2d2::{ Pool, ConnectionManager }, prelude::* };
 use crate::{ config::Config, models::User };
 
 #[derive(Debug, Serialize, Deserialize)]

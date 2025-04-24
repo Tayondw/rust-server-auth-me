@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use axum::{ http::StatusCode, Json };
-use diesel::r2d2::{ ConnectionManager, PooledConnection };
-use diesel::PgConnection;
+use diesel::{r2d2::{ ConnectionManager, PooledConnection }, PgConnection};
 
 use crate::{ AppState, ErrorResponse };
 

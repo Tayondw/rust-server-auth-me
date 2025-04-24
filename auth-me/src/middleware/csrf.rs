@@ -10,8 +10,7 @@ use ring::rand::{ SystemRandom, SecureRandom };
 use base64::{ Engine as _, engine::general_purpose::URL_SAFE };
 use time::{ Duration, OffsetDateTime };
 use serde::{ Serialize, Deserialize };
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 
 /// Helper function to check if a method is unsafe (requires CSRF protection)
