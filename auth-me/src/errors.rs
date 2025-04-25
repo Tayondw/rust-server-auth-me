@@ -1,16 +1,15 @@
-use axum::{http::StatusCode, response::{IntoResponse, Response}, Json};
+use axum::{ http::StatusCode, response::{ IntoResponse, Response }, Json };
 use serde_json::json;
-use std::{collections::HashMap, fmt};
+use std::{ collections::HashMap, fmt };
 use thiserror::Error;
-use serde::{Serialize, Deserialize};
+use serde::{ Serialize, Deserialize };
 
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error("The requested resource couldn't be found.")]
     NotFound,
 
-    #[error("Validation error")]
-    ValidationError(HashMap<String, String>),
+    #[error("Validation error")] ValidationError(HashMap<String, String>),
 
     #[error("Internal Server Error")]
     InternalServerError,
@@ -24,7 +23,8 @@ impl IntoResponse for AppError {
             AppError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
-        let mut response_body: serde_json::Value = json!({
+        let mut response_body: serde_json::Value =
+            json!({
             "success": false,
             "message": self.to_string(),
         });
@@ -39,11 +39,11 @@ impl IntoResponse for AppError {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ErrorResponse {
-      pub status: String,
-      pub message: String
+    pub status: String,
+    pub message: String,
 }
 
-impl fmt::Display for ErrorResponse{
+impl fmt::Display for ErrorResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", serde_json::to_string(&self).unwrap())
     }
@@ -51,20 +51,146 @@ impl fmt::Display for ErrorResponse{
 
 #[derive(Debug, PartialEq)]
 pub enum ErrorMessage {
-      DatabaseError,
-      InvalidToken,
-      TokenNotProvided,
-      PermissionDenied,
-      UserNotAuthenticated,
-      InternalServerError,
-      WrongCredentials,
-      EmptyPassword,
-      EmailExists,
-      UsernameExists,
-      UserNoLongerExists,
-      InvalidHashFormat,
-      HashingError,
-      InvalidEmailFormat,
-      ExceededMaxPasswordLength(usize),
+    DatabaseError,
+    InvalidToken,
+    TokenNotProvided,
+    PermissionDenied,
+    UserNotAuthenticated,
+    InternalServerError,
+    WrongCredentials,
+    EmptyPassword,
+    UserExists,
+    UserNotFound,
+    UserNoLongerExists,
+    InvalidHashFormat,
+    HashingError,
+    InvalidEmailFormat,
+    ExceededMaxPasswordLength(usize),
+    DeleteUserError,
+    PostsByUserError,
+    PostCreationError,
+    UserCreationError,
+    PostUpdateError,
+    UserUpdateError,
+    PostNotFound,
+    DeletePostError,
+}
 
+impl ToString for ErrorMessage {
+    fn to_string(&self) -> String {
+        self.to_str().to_owned()
+    }
+}
+
+impl ErrorMessage {
+    fn to_str(&self) -> String {
+        match self {
+            ErrorMessage::DatabaseError => "Error connecting to the database".to_string(),
+            ErrorMessage::DeletePostError => "Unable to delete the post".to_string(),
+            ErrorMessage::DeleteUserError => "Unable to delete the user".to_string(),
+            ErrorMessage::EmptyPassword => "Password cannot be empty".to_string(),
+            ErrorMessage::ExceededMaxPasswordLength(max_length) =>
+                format!("Passwords must not be more than {} characters", max_length),
+            ErrorMessage::HashingError => "Error occured while hashing the password".to_string(),
+            ErrorMessage::InternalServerError =>
+                "Server Error. Please try again later.".to_string(),
+            ErrorMessage::InvalidEmailFormat => "Email format is invalid".to_string(),
+            ErrorMessage::InvalidHashFormat => "Invalid password hash format".to_string(),
+            ErrorMessage::InvalidToken => "Authentication token is invalid or expired".to_string(),
+            ErrorMessage::PermissionDenied =>
+                "You are not allowed to perform this action".to_string(),
+            ErrorMessage::PostCreationError => "Unable to create post.".to_string(),
+            ErrorMessage::PostNotFound => "Post belonging to this id does not exist".to_string(),
+            ErrorMessage::PostUpdateError => "Unable to update post".to_string(),
+            ErrorMessage::PostsByUserError => "Error fetching posts for this user".to_string(),
+            ErrorMessage::TokenNotProvided =>
+                "You are not logged in, please provide a token".to_string(),
+            ErrorMessage::UserCreationError => "Unable to create user.".to_string(),
+            ErrorMessage::UserNoLongerExists =>
+                "User belonging to this id or token does not exist".to_string(),
+            ErrorMessage::UserNotAuthenticated =>
+                "Authentication required, please log in".to_string(),
+            ErrorMessage::UserNotFound =>
+                "User to locate user based on the id or token".to_string(),
+            ErrorMessage::UserExists =>
+                "User with this email and/ or username already exists".to_string(),
+            ErrorMessage::UserUpdateError =>
+                "Unable to update user: email, username, password, or name maybe incorrect format or in use".to_string(),
+            ErrorMessage::WrongCredentials =>
+                "Email, username, or password is incorrect".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HttpError {
+    pub message: String,
+    pub status: StatusCode,
+}
+
+impl HttpError {
+    pub fn new(message: impl Into<String>, status: StatusCode) -> Self {
+        HttpError {
+            message: message.into(),
+            status,
+        }
+    }
+
+    pub fn server_error(message: impl Into<String>) -> Self {
+        HttpError {
+            message: message.into(),
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+
+    pub fn bad_request(message: impl Into<String>) -> Self {
+        HttpError {
+            message: message.into(),
+            status: StatusCode::BAD_REQUEST,
+        }
+    }
+
+    pub fn unique_constraint_validation(message: impl Into<String>) -> Self {
+        HttpError {
+            message: message.into(),
+            status: StatusCode::CONFLICT,
+        }
+    }
+
+    pub fn unauthorized(message: impl Into<String>) -> Self {
+        HttpError {
+            message: message.into(),
+            status: StatusCode::UNAUTHORIZED,
+        }
+    }
+
+    pub fn not_found(message: impl Into<String>) -> Self {
+        HttpError {
+            message: message.into(),
+            status: StatusCode::NOT_FOUND,
+        }
+    }
+
+    pub fn into_http_response(self) -> Response {
+        let response = Json(ErrorResponse {
+            status: "fail".to_string(),
+            message: self.message.clone(),
+        });
+
+        (self.status, response).into_response()
+    }
+}
+
+impl fmt::Display for HttpError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "HttpError: message: {}, status: {}", self.message, self.status)
+    }
+}
+
+impl std::error::Error for HttpError {}
+
+impl IntoResponse for HttpError {
+    fn into_response(self) -> Response {
+        self.into_http_response()
+    }
 }
