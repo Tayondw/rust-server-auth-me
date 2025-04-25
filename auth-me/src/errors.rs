@@ -1,7 +1,8 @@
 use axum::{http::StatusCode, response::{IntoResponse, Response}, Json};
 use serde_json::json;
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 use thiserror::Error;
+use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -34,4 +35,36 @@ impl IntoResponse for AppError {
 
         (status_code, Json(response_body)).into_response()
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ErrorResponse {
+      pub status: String,
+      pub message: String
+}
+
+impl fmt::Display for ErrorResponse{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", serde_json::to_string(&self).unwrap())
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ErrorMessage {
+      DatabaseError,
+      InvalidToken,
+      TokenNotProvided,
+      PermissionDenied,
+      UserNotAuthenticated,
+      InternalServerError,
+      WrongCredentials,
+      EmptyPassword,
+      EmailExists,
+      UsernameExists,
+      UserNoLongerExists,
+      InvalidHashFormat,
+      HashingError,
+      InvalidEmailFormat,
+      ExceededMaxPasswordLength(usize),
+
 }
