@@ -1,6 +1,11 @@
 use std::sync::Arc;
 use axum::{ extract::{ State, Path }, routing::{ get, patch }, Router, Json, http::StatusCode };
-use diesel::{ prelude::*, r2d2::{ PooledConnection, ConnectionManager }, PgConnection };
+use diesel::{
+    prelude::*,
+    r2d2::{ PooledConnection, ConnectionManager },
+    PgConnection,
+    result::Error,
+};
 use crate::{
     models::User,
     schema::users::{ self },
@@ -22,10 +27,10 @@ pub fn user_routes() -> Router<Arc<AppState>> {
 
 // GET ALL USERS
 pub async fn get_users(State(state): State<Arc<AppState>>) -> Result<Json<Vec<User>>, HttpError> {
-    let mut conn = state.conn()?;
+    let mut conn: PooledConnection<ConnectionManager<PgConnection>> = state.conn()?;
 
     // Execute the query (directly, no interact needed)
-    let users_result: Result<Vec<User>, diesel::result::Error> = users::table
+    let users_result: Result<Vec<User>, Error> = users::table
         .select(User::as_select())
         .load(&mut *conn);
 
@@ -49,7 +54,7 @@ pub async fn get_user_by_id(
         .first(&mut *conn)
         .map_err(|e| {
             match e {
-                diesel::result::Error::NotFound => {
+                Error::NotFound => {
                     HttpError::new(
                         ErrorMessage::UserNoLongerExists.to_string(),
                         StatusCode::NOT_FOUND
@@ -86,7 +91,7 @@ pub async fn update_user_handler(
     Path(user_id): Path<i32>,
     Json(update_data): Json<UpdateUserRequest>
 ) -> Result<Json<User>, HttpError> {
-    let mut conn = state.conn()?;
+    let mut conn: PooledConnection<ConnectionManager<PgConnection>> = state.conn()?;
 
     update_user(
         &mut conn,
@@ -109,7 +114,7 @@ pub async fn delete_user_handler(
 
     match delete_user(&mut conn, user_id).await {
         Ok(_) => Ok(StatusCode::NO_CONTENT), // If successful, return No Content status
-        Err(diesel::result::Error::NotFound) => {
+        Err(Error::NotFound) => {
             // If user is not found, return Not Found status with a specific message
             Err(HttpError::not_found(ErrorMessage::UserNotFound.to_string()))
         }
