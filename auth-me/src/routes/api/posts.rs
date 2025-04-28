@@ -19,8 +19,8 @@ use crate::{
     AppState,
     database::DbConnExt,
     operations::post_operations::{ get_posts_by_user, create_post, update_post, delete_post },
-    routes::api::{ CreatePostRequest, UpdatePostRequest, PostQuery },
     errors::{ HttpError, ErrorMessage },
+    dto::post_dtos::{CreatePostRequest, UpdatePostRequest, PostQuery}
 };
 
 // POST ROUTER

@@ -11,7 +11,7 @@ use crate::{
         set_access_token,
         set_refresh_token,
     },
-    models::LoginRequest,
+    dto::user_dtos::LoginRequest
 };
 
 pub async fn login_handler(
@@ -19,7 +19,7 @@ pub async fn login_handler(
     cookies: Cookies,
     Json(credentials): Json<LoginRequest>
 ) -> impl IntoResponse {
-    match auth_service.validate_credentials(&credentials.username, &credentials.password).await {
+    match auth_service.validate_credentials(&credentials.email, &credentials.password).await {
         Ok(user) => {
             let user_id = user.id.to_string();
             match auth_service.generate_access_token(&user_id) {
@@ -179,4 +179,9 @@ pub async fn logout_handler(cookies: Cookies) -> impl IntoResponse {
         })
         ),
     )
+}
+
+// Keep the protected handler function
+pub async fn protected_handler() -> impl IntoResponse {
+    (axum::http::StatusCode::OK, Json(json!({ "message": "This is a protected route" })))
 }

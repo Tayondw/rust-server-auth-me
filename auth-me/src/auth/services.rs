@@ -32,20 +32,20 @@ pub struct AuthService {
     access_secret: String,
     refresh_secret: String,
     pool: Pool<ConnectionManager<PgConnection>>,
-    config: Config
+    config: Config,
 }
 
 impl AuthService {
-      pub fn config(&self) -> &Config {
-            &self.config
-      }
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
 
     pub fn new(config: &Config, pool: Pool<ConnectionManager<PgConnection>>) -> Self {
         Self {
             access_secret: config.database.jwt_secret.clone(),
             refresh_secret: config.database.jwt_refresh_secret.clone(),
             pool,
-            config: config.clone()
+            config: config.clone(),
         }
     }
 

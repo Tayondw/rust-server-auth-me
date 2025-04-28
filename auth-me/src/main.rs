@@ -18,6 +18,7 @@ mod routes;
 mod errors;
 mod handlers;
 mod operations;
+mod dto;
 
 use config::Config;
 use middleware::{
@@ -26,7 +27,7 @@ use middleware::{
     cookies::cookie_layer,
     security_headers::security_headers,
 };
-use routes::{ api::{ users::user_routes, posts::post_routes }, general_router::general_routes };
+use routes::{ api::{ users_router::user_routes, posts::post_routes }, general_router::general_routes };
 use auth::router::authentication_routes;
 
 pub struct AppState {
