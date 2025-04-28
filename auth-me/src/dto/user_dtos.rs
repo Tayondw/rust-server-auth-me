@@ -1,7 +1,9 @@
-use chrono::{ DateTime, Utc };
+use chrono::{ DateTime, TimeZone, Utc };
 use serde::{ Deserialize, Serialize };
 use regex::Regex;
 use validator::{ Validate, ValidationError };
+
+use crate::models::User;
 
 #[derive(Validate, Debug, Default, Clone, Serialize, Deserialize)]
 pub struct LoginRequest {
@@ -64,6 +66,48 @@ fn validate_password_complexity(password: &str) -> Result<(), ValidationError> {
     Ok(())
 }
 
+#[derive(Serialize, Deserialize, Validate)]
+pub struct RequestQueryDto {
+    #[validate(range(min = 1))]
+    pub page: Option<usize>,
+
+    #[validate(range(min = 1, max = 50))]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FilterUser {
+    pub id: String,
+    pub name: String,
+    pub username: String,
+    pub email: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: DateTime<Utc>,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: DateTime<Utc>,
+}
+
+impl FilterUser {
+    pub fn filter_user(user: &User) -> Self {
+        FilterUser {
+            id: user.id.to_string(),
+            name: user.name.to_owned(),
+            username: user.username.to_owned(),
+            email: user.email.to_owned(),
+            created_at: Utc.from_utc_datetime(&user.created_at),
+            updated_at: user.updated_at,
+        }
+    }
+
+    pub fn filter_users(user: &[User]) -> Vec<FilterUser> {
+        user.iter().map(FilterUser::filter_user).collect()
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserData {
+    pub user: FilterUser,
+}
 #[derive(Deserialize)]
 pub struct UpdateUserRequest {
     #[serde(default)] // This makes the field optional in JSON
