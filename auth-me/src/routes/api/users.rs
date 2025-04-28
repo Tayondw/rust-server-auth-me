@@ -10,7 +10,8 @@ use crate::{
     models::User,
     schema::users::{ self },
     AppState,
-    database::{ operations::users::{ create_user, update_user, delete_user }, DbConnExt },
+    database::DbConnExt,
+    operations::user_operations::{ create_user, update_user, delete_user },
     routes::api::{ CreateUserRequest, UpdateUserRequest },
     errors::{ HttpError, ErrorMessage },
 };

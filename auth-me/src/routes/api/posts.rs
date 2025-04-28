@@ -17,10 +17,8 @@ use crate::{
     models::Post,
     schema::posts::{ self },
     AppState,
-    database::{
-        operations::posts::{ get_posts_by_user, create_post, update_post, delete_post },
-        DbConnExt,
-    },
+    database::DbConnExt,
+    operations::post_operations::{ get_posts_by_user, create_post, update_post, delete_post },
     routes::api::{ CreatePostRequest, UpdatePostRequest, PostQuery },
     errors::{ HttpError, ErrorMessage },
 };
