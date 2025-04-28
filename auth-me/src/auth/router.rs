@@ -1,15 +1,15 @@
 use axum::{ Router, routing::{ post, get }, response::IntoResponse, Json, middleware };
 use std::sync::Arc;
 use serde_json::json;
-use diesel::{PgConnection, r2d2::{Pool, ConnectionManager}};
+use diesel::{ PgConnection, r2d2::{ Pool, ConnectionManager } };
 
 use crate::{
     auth::{
         services::AuthService,
-        handlers::{ login_handler, refresh_token_handler, logout_handler },
         middleware::auth_middleware,
     },
     middleware::cookies::cookie_layer,
+    handlers::authentication_handlers::*,
     AppState,
     config::Config,
 };
