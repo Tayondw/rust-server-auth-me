@@ -51,7 +51,7 @@ impl AuthService {
 
     pub async fn validate_credentials(
         &self,
-        username_param: &str,
+        email_param: &str,
         password_input: &str
     ) -> Result<User, Error> {
         use crate::schema::users::dsl::*;
@@ -59,7 +59,7 @@ impl AuthService {
         let mut conn = self.pool.get()?;
 
         let user = users
-            .filter(username.eq(username_param))
+            .filter(email.eq(email_param))
             .first::<User>(&mut conn)
             .map_err(|_| Error::InvalidCredentials)?;
 
