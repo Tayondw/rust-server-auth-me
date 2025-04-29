@@ -82,7 +82,7 @@ impl ErrorMessage {
             ErrorMessage::UserExists =>
                 "User with this email and/ or username already exists".to_string(),
             ErrorMessage::UserUpdateError =>
-                "Unable to update user: email, username, password, or name maybe incorrect format or in use".to_string(),
+                "Unable to update user: email, username, password, or name maybe incorrect format or in use OR the user id does not exist".to_string(),
             ErrorMessage::WrongCredentials =>
                 "Email, username, or password is incorrect".to_string(),
         }
