@@ -14,6 +14,8 @@ pub struct User {
     pub password: String,
     pub created_at: chrono::NaiveDateTime,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub is_verified: bool,
+    pub verification_token: Option<String>,
 }
 
 #[derive(Insertable, Deserialize, Debug)]
@@ -23,6 +25,8 @@ pub struct NewUser {
     pub username: String,
     pub email: String,
     pub password: String,
+    pub is_verified: bool,
+    pub verification_token: Option<String>,
 }
 
 #[derive(AsChangeset, Deserialize, Debug)]

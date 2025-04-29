@@ -1,11 +1,23 @@
-use axum::{ extract::State, response::IntoResponse, Json, http::StatusCode };
+use axum::{
+    extract::{ Query, State },
+    response::{ IntoResponse, Json as AxumJson },
+    Json,
+    http::StatusCode,
+};
+use axum_macros::debug_handler;
+use uuid::Uuid;
+use diesel::{ prelude::*, dsl::now };
 use tower_cookies::Cookies;
 use serde_json::json;
 use std::sync::Arc;
-use tracing::{info, error};
+use tracing::{info, error, debug};
 use validator::Validate;
+use serde::Deserialize;
+use chrono::Utc;
 
 use crate::{
+    schema::users::dsl::*,
+    models::User,
     auth::services::AuthService,
     middleware::cookies::{
         get_refresh_token,
@@ -13,47 +25,56 @@ use crate::{
         set_access_token,
         set_refresh_token,
     },
-    dto::authentication_dtos::{ LoginRequest, SignupRequest, SignupResponse },
+    dto::authentication_dtos::{ LoginRequest, SignupRequest, SignupResponse, VerifyEmailQueryDto },
     errors::{ HttpError, ErrorMessage },
     AppState,
     operations::user_operations::create_user,
-    database::DbConnExt
+    email::emails::send_verification_email,
+    database::DbConnExt,
 };
 
 pub async fn signup_handler(
-    State(state): State<Arc<AppState>>,
-    Json(signup_data): Json<SignupRequest>
-) -> Result<Json<SignupResponse>, HttpError> {
+    State(state): State<Arc<AppState>>, // This extracts the AppState
+    Json(signup_data): Json<SignupRequest> // This extracts the signup data as JSON
+) -> Result<impl IntoResponse, HttpError> {
     info!("Processing signup request for email: {}", signup_data.email);
 
-    /*
-     Single validation call that will check all our constraints:
-    - Name length
-    - Username format and length
-    - Email format
-    - Password complexity and length
-    - Password match
-    - Terms acceptance
-    */
-    if let Err(_) = signup_data.validate() {
-        return Err(HttpError::validation_error(ErrorMessage::SignUpError.to_string()));
+    // Single validation check for the signup data
+    if let Err(validation_errors) = signup_data.validate() {
+        return Err(HttpError::validation_error(validation_errors.to_string()));
     }
 
-    let mut conn = state.conn()?;
+    let mut conn = state.conn()?; // Accessing the connection pool from AppState
 
     match
         create_user(
             &mut conn,
-            signup_data.email,
-            signup_data.name,
-            signup_data.username,
-            signup_data.password
+            signup_data.email.clone(), // Added .clone()
+            signup_data.name.clone(), // Added .clone()
+            signup_data.username.clone(), // Added .clone()
+            signup_data.password.clone() // Added .clone()
         )
     {
         Ok(user) => {
             info!("Successfully created user with ID: {}", user.id);
+
+            if let Some(token) = &user.verification_token {
+                let email_str: &str = user.email.as_str(); // Explicitly create &str
+                let username_str: &str = user.username.as_str();
+                debug!("Email to send: {}", email_str); // Add logging
+                debug!("Username to send: {}", username_str);
+                debug!("Token to send: {}", token);
+
+                let result = send_verification_email(email_str, username_str, token).await;
+
+                if let Err(e) = result {
+                    error!("send_verification_email failed: {}", e);
+                    return Err(e); // Propagate the error from send_verification_email
+                }
+            }
+
             Ok(
-                Json(SignupResponse {
+                Json(SignupResponse { // Changed AxumJson to Json
                     message: "User successfully created".to_string(),
                     user_id: user.id.to_string(),
                 })
@@ -67,6 +88,41 @@ pub async fn signup_handler(
                 Err(HttpError::server_error(ErrorMessage::UserCreationError.to_string()))
             }
         }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct VerifyQuery {
+    token: String,
+}
+
+pub async fn verify_email_handler(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<VerifyQuery>
+) -> Result<impl IntoResponse, HttpError> {
+    let mut conn = state.conn()?;
+
+    // Look up user by token
+    let result = diesel
+        ::update(users.filter(verification_token.eq(&query.token)))
+        .set((
+            is_verified.eq(true),
+            verification_token.eq::<Option<String>>(None),
+            updated_at.eq(Utc::now().naive_utc()),
+        ))
+        .get_result::<User>(&mut conn);
+
+    match result {
+        Ok(user) =>
+            Ok(
+                Json(
+                    json!({
+            "message": "Email verified successfully",
+            "user_id": user.id
+        })
+                )
+            ),
+        Err(_) => Err(HttpError::not_found("Invalid or expired token")),
     }
 }
 

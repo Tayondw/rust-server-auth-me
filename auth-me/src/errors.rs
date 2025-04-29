@@ -40,7 +40,7 @@ pub enum ErrorMessage {
     PostNotFound,
     DeletePostError,
     NotFound,
-    SignUpError
+    SignUpError,
 }
 
 impl ToString for ErrorMessage {
@@ -80,7 +80,7 @@ impl ErrorMessage {
             ErrorMessage::UserNotAuthenticated =>
                 "Authentication required, please log in".to_string(),
             ErrorMessage::UserNotFound =>
-                "User to locate user based on the id or token".to_string(),
+                "Unable to locate user based on the id or token".to_string(),
             ErrorMessage::UserExists =>
                 "User with this email and/ or username already exists".to_string(),
             ErrorMessage::UserUpdateError =>

@@ -1,6 +1,7 @@
 use diesel::prelude::*;
 use bcrypt::{ hash, DEFAULT_COST };
-use crate::{models::{ User, NewUser, UpdateUser }, schema::users};
+use uuid::Uuid;
+use crate::{models::{ NewUser, UpdateUser, User }, schema::users::{self}};
 
 // CREATE USER
 pub fn create_user(
@@ -11,12 +12,15 @@ pub fn create_user(
     password: String
 ) -> Result<User, Box<dyn std::error::Error>> {
     let password: String = hash(password.as_bytes(), DEFAULT_COST)?;
+    let token = Some(Uuid::new_v4().to_string());
 
     let new_user: NewUser = NewUser {
         name,
         username,
         email,
         password,
+        is_verified: false,
+        verification_token: token,
     };
 
     let user: User = diesel::insert_into(users::table).values(&new_user).get_result(conn)?;

@@ -1,42 +1,38 @@
-use axum::{ extract::Extension, middleware::from_fn, routing::get, Router };
-use diesel::{prelude::*, r2d2::{ ConnectionManager, Pool }};
-use std::{ net::SocketAddr, sync::Arc };
-use tower_http::{ cors::CorsLayer, trace::TraceLayer };
-use dotenvy::dotenv;
-use tracing::info;
-use std::error::Error as StdError;
-use tracing_subscriber;
-use serde::Serialize;
-
 mod config;
 mod models;
 mod schema;
-mod database;
-mod middleware;
-mod auth;
-mod routes;
-mod errors;
-mod handlers;
-mod operations;
 mod dto;
+mod errors;
+mod database;
+mod auth;
+mod middleware;
+mod email;
+mod utils;
+mod operations;
+mod handlers;
+mod routes;
 
+use std::{ net::SocketAddr, sync::Arc, error::Error as StdError };
+
+use axum::{ extract::Extension, middleware::from_fn, routing::get, Router };
+use diesel::{prelude::*, r2d2::{ ConnectionManager, Pool }};
 use config::Config;
+use dotenvy::dotenv;
+use routes::{ api::{ users_router::user_routes, posts::post_routes }, general_router::general_routes };
+use auth::router::authentication_routes;
+use tower_http::{ cors::CorsLayer, trace::TraceLayer };
 use middleware::{
     csrf::{ csrf_middleware, TokenStore, get_csrf_token },
     cors::create_cors_layer,
     cookies::cookie_layer,
     security_headers::security_headers,
 };
-use routes::{ api::{ users_router::user_routes, posts::post_routes }, general_router::general_routes };
-use auth::router::authentication_routes;
+use tracing_subscriber;
+use tracing::info;
 
+#[derive(Clone)]
 pub struct AppState {
     pub db_pool: Pool<ConnectionManager<PgConnection>>,
-}
-
-#[derive(Serialize)]
-pub struct ErrorResponse {
-    pub message: String,
 }
 
 #[tokio::main]
@@ -72,7 +68,7 @@ async fn main() -> Result<(), Box<dyn StdError>> {
     let token_store: Arc<TokenStore> = Arc::new(TokenStore::new());
 
     let app: Router = Router::new()
-        .merge(user_routes())
+        .merge(user_routes(shared_state.clone()))
         .merge(post_routes())
         .merge(general_routes())
         .nest("/api/auth", authentication_routes(&config, authentication_pool))

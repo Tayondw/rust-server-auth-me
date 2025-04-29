@@ -89,6 +89,7 @@ pub struct FilterUser {
     pub created_at: DateTime<Utc>,
     #[serde(rename = "updatedAt")]
     pub updated_at: DateTime<Utc>,
+    pub is_verified: bool,
 }
 
 impl FilterUser {
@@ -100,6 +101,7 @@ impl FilterUser {
             email: user.email.to_owned(),
             created_at: Utc.from_utc_datetime(&user.created_at),
             updated_at: user.updated_at,
+            is_verified: user.is_verified,
         }
     }
 

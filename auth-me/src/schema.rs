@@ -25,6 +25,8 @@ diesel::table! {
         password -> Text,
         created_at -> Timestamp,
         updated_at -> Timestamptz,
+        is_verified -> Bool,
+        verification_token -> Nullable<Varchar>,
     }
 }
 
