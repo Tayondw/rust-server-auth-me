@@ -330,6 +330,7 @@ dependencies = [
  "env_logger",
  "http-body-util",
  "jsonwebtoken",
+ "lazy_static",
  "log",
  "rand 0.9.0",
  "regex",

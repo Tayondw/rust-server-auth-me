@@ -40,6 +40,7 @@ pub enum ErrorMessage {
     PostNotFound,
     DeletePostError,
     NotFound,
+    SignUpError
 }
 
 impl ToString for ErrorMessage {
@@ -70,6 +71,7 @@ impl ErrorMessage {
             ErrorMessage::PostNotFound => "Post belonging to this id does not exist".to_string(),
             ErrorMessage::PostUpdateError => "Unable to update post".to_string(),
             ErrorMessage::PostsByUserError => "Error fetching posts for this user".to_string(),
+            ErrorMessage::SignUpError => "Validation error during signup".to_string(),
             ErrorMessage::TokenNotProvided =>
                 "You are not logged in, please provide a token".to_string(),
             ErrorMessage::UserCreationError => "Unable to create user.".to_string(),
@@ -135,6 +137,13 @@ impl HttpError {
         HttpError {
             message: message.into(),
             status: StatusCode::NOT_FOUND,
+        }
+    }
+
+    pub fn validation_error(message: impl Into<String>) -> Self {
+        HttpError {
+            message: message.into(),
+            status: StatusCode::BAD_REQUEST,
         }
     }
 

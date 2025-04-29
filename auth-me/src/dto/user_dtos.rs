@@ -1,22 +1,11 @@
 use chrono::{ DateTime, TimeZone, Utc };
 use serde::{ Deserialize, Serialize };
+use core::str;
 use regex::Regex;
 use validator::{ Validate, ValidationError };
+use lazy_static::lazy_static;
 
 use crate::models::User;
-
-#[derive(Validate, Debug, Default, Clone, Serialize, Deserialize)]
-pub struct LoginRequest {
-    #[validate(length(min = 1, message = "Email is required"), email(message = "Email is invalid"))]
-    pub email: String,
-
-    #[validate(
-        length(min = 1, message = "Password is required"),
-        length(min = 8, message = "Password must be at least 8 characters"),
-        length(max = 25, message = "Password too long, password must be no more than 25 characters")
-    )]
-    pub password: String,
-}
 
 #[derive(Validate, Debug, Default, Clone, Serialize, Deserialize)]
 pub struct CreateUserRequest {
@@ -28,7 +17,11 @@ pub struct CreateUserRequest {
 
     #[validate(
         length(min = 1, message = "Username is required"),
-        length(max = 25, message = "Username cannot be longer than 25 characters")
+        length(max = 25, message = "Username cannot be longer than 25 characters"),
+        regex(
+            path = "USERNAME_REGEX",
+            message = "Username can only contain letters, numbers, and underscores"
+        )
     )]
     pub username: String,
 
@@ -47,6 +40,9 @@ pub struct CreateUserRequest {
     )]
     #[serde(rename = "passwordConfirm")]
     pub password_confirm: String,
+
+    #[validate(custom = "validate_terms_acceptance")]
+    pub terms_accepted: bool,
 }
 
 // Custom password validator function
@@ -64,6 +60,14 @@ fn validate_password_complexity(password: &str) -> Result<(), ValidationError> {
     }
 
     Ok(())
+}
+
+lazy_static! {
+    static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9_]+$").unwrap();
+}
+
+fn validate_terms_acceptance(terms: &bool) -> Result<(), ValidationError> {
+    if *terms { Ok(()) } else { Err(ValidationError::new("Terms must be accepted")) }
 }
 
 #[derive(Serialize, Deserialize, Validate)]
@@ -108,6 +112,7 @@ impl FilterUser {
 pub struct UserData {
     pub user: FilterUser,
 }
+
 #[derive(Deserialize)]
 pub struct UpdateUserRequest {
     #[serde(default)] // This makes the field optional in JSON
