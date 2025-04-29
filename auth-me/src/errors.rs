@@ -1,41 +1,6 @@
 use axum::{ http::StatusCode, response::{ IntoResponse, Response }, Json };
-use serde_json::json;
-use std::{ collections::HashMap, fmt };
-use thiserror::Error;
+use std::fmt;
 use serde::{ Serialize, Deserialize };
-
-#[derive(Debug, Error)]
-pub enum AppError {
-    #[error("The requested resource couldn't be found.")]
-    NotFound,
-
-    #[error("Validation error")] ValidationError(HashMap<String, String>),
-
-    #[error("Internal Server Error")]
-    InternalServerError,
-}
-
-impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
-        let status_code: StatusCode = match self {
-            AppError::NotFound => StatusCode::NOT_FOUND,
-            AppError::ValidationError(_) => StatusCode::BAD_REQUEST,
-            AppError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
-        };
-
-        let mut response_body: serde_json::Value =
-            json!({
-            "success": false,
-            "message": self.to_string(),
-        });
-
-        if let AppError::ValidationError(errors) = self {
-            response_body["errors"] = serde_json::to_value(errors).unwrap();
-        }
-
-        (status_code, Json(response_body)).into_response()
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ErrorResponse {
@@ -74,6 +39,7 @@ pub enum ErrorMessage {
     UserUpdateError,
     PostNotFound,
     DeletePostError,
+    NotFound,
 }
 
 impl ToString for ErrorMessage {
@@ -97,6 +63,7 @@ impl ErrorMessage {
             ErrorMessage::InvalidEmailFormat => "Email format is invalid".to_string(),
             ErrorMessage::InvalidHashFormat => "Invalid password hash format".to_string(),
             ErrorMessage::InvalidToken => "Authentication token is invalid or expired".to_string(),
+            ErrorMessage::NotFound => "The requested resource could not be found".to_string(),
             ErrorMessage::PermissionDenied =>
                 "You are not allowed to perform this action".to_string(),
             ErrorMessage::PostCreationError => "Unable to create post.".to_string(),

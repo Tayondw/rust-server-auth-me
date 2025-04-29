@@ -3,8 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use validator::Validate;
 
-use crate::errors::AppError;
-
 #[derive(Deserialize)]
 pub struct PostQuery {
     pub limit: Option<i64>,
