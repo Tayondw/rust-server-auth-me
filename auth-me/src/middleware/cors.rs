@@ -13,7 +13,7 @@ pub fn create_cors_layer(environment: &str) -> CorsLayer {
             .allow_credentials(true)
     } else {
         CorsLayer::new()
-            .allow_origin("http://127.0.0.1:8080".parse::<HeaderValue>().unwrap())
+            .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
             .allow_methods([
                 Method::GET,
                 Method::POST,
