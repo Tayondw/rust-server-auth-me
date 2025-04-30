@@ -38,7 +38,7 @@ export interface AuthError {
 // Auth API functions
 export const signUp = async (data: SignUpRequest): Promise<SignUpResponse> => {
 	try {
-		return await client<SignUpResponse>("/signup", {
+		return await client<SignUpResponse>("/api/signup", {
 			method: "POST",
 			body: data,
 		});
