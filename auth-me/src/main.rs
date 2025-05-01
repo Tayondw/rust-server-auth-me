@@ -12,7 +12,7 @@ mod operations;
 mod handlers;
 mod routes;
 
-use std::{ net::SocketAddr, sync::Arc, error::Error as StdError };
+use std::{ net::SocketAddr, sync::Arc };
 
 use axum::{ extract::Extension, middleware::from_fn, routing::get, Router };
 use diesel::{ prelude::*, r2d2::{ ConnectionManager, Pool } };
@@ -23,17 +23,17 @@ use routes::{
     general_router::general_routes,
 };
 use auth::router::authentication_routes;
-use tower_http::{ cors::CorsLayer, trace::TraceLayer };
+use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use middleware::{
     csrf::{ csrf_middleware, TokenStore, get_csrf_token },
     cors::create_cors_layer,
     cookies::cookie_layer,
     security_headers::security_headers,
 };
-use errors::{ HttpError, ErrorMessage };
+use errors::HttpError;
 use tracing_subscriber;
 use tracing::info;
-use tokio::net::{TcpListener};
+use tokio::net::TcpListener;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -51,13 +51,13 @@ async fn main() -> Result<(), HttpError> {
     })?;
 
     // Set up database connection pool
-    let manager = ConnectionManager::<PgConnection>::new(&config.database.database_url);
-    let pool = Pool::builder()
+    let manager: ConnectionManager<PgConnection> = ConnectionManager::<PgConnection>::new(&config.database.database_url);
+    let pool: Pool<ConnectionManager<PgConnection>> = Pool::builder()
         .build(manager)
         .map_err(|e| HttpError::server_error(format!("Failed to create pool: {}", e)))?;
 
-    let authentication_pool = pool.clone();
-    let shared_state = Arc::new(AppState { db_pool: pool });
+    let authentication_pool: Pool<ConnectionManager<PgConnection>> = pool.clone();
+    let shared_state: Arc<AppState> = Arc::new(AppState { db_pool: pool });
 
     // Initialize tracing subscriber
     tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).try_init().ok();
@@ -68,8 +68,8 @@ async fn main() -> Result<(), HttpError> {
     let environment = std::env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string());
 
     // Set up middleware and routes
-    let cors = create_cors_layer(&environment);
-    let token_store = Arc::new(TokenStore::new());
+    let cors: CorsLayer = create_cors_layer(&environment);
+    let token_store: Arc<TokenStore> = Arc::new(TokenStore::new());
 
     let app = Router::new()
         .merge(user_routes(shared_state.clone()))
@@ -86,7 +86,7 @@ async fn main() -> Result<(), HttpError> {
         .layer(TraceLayer::new_for_http());
 
     // Start the server
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
+    let addr: SocketAddr = SocketAddr::from(([127, 0, 0, 1], 8080));
     println!("Server running on http://{}", addr);
 
     let listener: TcpListener = TcpListener

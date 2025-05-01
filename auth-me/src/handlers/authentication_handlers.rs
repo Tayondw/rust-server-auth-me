@@ -1,12 +1,10 @@
 use axum::{
     extract::{ Query, State },
-    response::{ IntoResponse, Json as AxumJson },
+    response::IntoResponse,
     Json,
     http::StatusCode,
 };
-use axum_macros::debug_handler;
-use uuid::Uuid;
-use diesel::{ prelude::*, dsl::now };
+use diesel::prelude::*;
 use tower_cookies::Cookies;
 use serde_json::json;
 use std::sync::Arc;
@@ -25,7 +23,7 @@ use crate::{
         set_access_token,
         set_refresh_token,
     },
-    dto::authentication_dtos::{ LoginRequest, SignupRequest, SignupResponse, VerifyEmailQueryDto },
+    dto::authentication_dtos::{ LoginRequest, SignupRequest },
     errors::{ HttpError, ErrorMessage },
     AppState,
     operations::user_operations::create_user,
