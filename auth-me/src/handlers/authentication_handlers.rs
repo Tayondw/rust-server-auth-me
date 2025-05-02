@@ -3,7 +3,7 @@ use diesel::{ prelude::*, result::Error as DieselError };
 use tower_cookies::Cookies;
 use serde_json::json;
 use std::sync::Arc;
-use tracing::{ info, error, debug };
+use tracing::{ info, error};
 use validator::Validate;
 use serde::Deserialize;
 use chrono::Utc;
@@ -84,11 +84,11 @@ pub async fn signup_handler(
                 )
             ),
         Err(DieselError::RollbackTransaction) => {
-            Err(HttpError::server_error("Failed to send verification email".to_string()))
+            Err(HttpError::server_error(ErrorMessage::EmailVerificationError.to_string()))
         }
         Err(e) => {
             error!("Database error: {}", e);
-            Err(HttpError::server_error("User creation failed".to_string()))
+            Err(HttpError::server_error(ErrorMessage::UserCreationError.to_string()))
         }
     }
 }

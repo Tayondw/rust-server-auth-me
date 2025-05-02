@@ -41,6 +41,7 @@ pub enum ErrorMessage {
     DeletePostError,
     NotFound,
     SignUpError,
+    EmailVerificationError,
 }
 
 impl ToString for ErrorMessage {
@@ -55,6 +56,7 @@ impl ErrorMessage {
             ErrorMessage::DatabaseError => "Error connecting to the database".to_string(),
             ErrorMessage::DeletePostError => "Unable to delete the post".to_string(),
             ErrorMessage::DeleteUserError => "Unable to delete the user".to_string(),
+            ErrorMessage::EmailVerificationError => "Failed to send verification email".to_string(),
             ErrorMessage::EmptyPassword => "Password cannot be empty".to_string(),
             ErrorMessage::ExceededMaxPasswordLength(max_length) =>
                 format!("Passwords must not be more than {} characters", max_length),
