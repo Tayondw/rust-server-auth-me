@@ -1,10 +1,5 @@
-use axum::{
-    extract::{ Query, State },
-    response::IntoResponse,
-    Json,
-    http::StatusCode,
-};
-use diesel::prelude::*;
+use axum::{ extract::{ Query, State }, response::IntoResponse, Json, http::StatusCode };
+use diesel::{ prelude::*, result::Error as DieselError };
 use tower_cookies::Cookies;
 use serde_json::json;
 use std::sync::Arc;
@@ -41,44 +36,111 @@ pub async fn signup_handler(
         return Err(HttpError::validation_error(validation_errors.to_string()));
     }
 
-    let mut conn = state.conn()?;
+    let mut conn = state.conn()?; // PooledConnection
 
-    let user = create_user(
-        &mut conn,
-        signup_data.email.clone(),
-        signup_data.name.clone(),
-        signup_data.username.clone(),
-        signup_data.password.clone()
-    ).map_err(|e| {
-        error!("Error creating user: {}", e);
-        if e.to_string().contains("UNIQUE constraint failed") {
-            HttpError::unique_constraint_validation(ErrorMessage::UserExists.to_string())
-        } else {
-            HttpError::server_error(ErrorMessage::UserCreationError.to_string())
+    // Wrap in a transaction
+    let user_result = conn.transaction::<User, DieselError, _>(|conn| {
+        // Create user
+        let user = create_user(
+            conn,
+            signup_data.email.clone(),
+            signup_data.name.clone(),
+            signup_data.username.clone(),
+            signup_data.password.clone()
+        ).map_err(|e| {
+            tracing::error!("Error creating user: {}", e);
+            DieselError::RollbackTransaction
+        })?;
+
+        // Send email inside the blocking context
+        if let Some(token) = &user.verification_token {
+            let email_str = user.email.clone();
+            let username_str = user.username.clone();
+            let token = token.clone();
+
+            // Diesel transactions are sync, so block on the async send
+            let result = tokio::task::block_in_place(move || {
+                tokio::runtime::Handle
+                    ::current()
+                    .block_on(send_verification_email(&email_str, &username_str, &token))
+            });
+
+            if let Err(e) = result {
+                tracing::error!("send_verification_email failed: {}", e);
+                return Err(DieselError::RollbackTransaction); // triggers rollback
+            }
         }
-    })?;
 
-    if let Some(token) = &user.verification_token {
-        let email_str = &user.email;
-        let username_str = &user.username;
-        debug!("Email to send: {}", email_str);
-        debug!("Username to send: {}", username_str);
-        debug!("Token to send: {}", token);
+        Ok(user)
+    });
 
-        if let Err(e) = send_verification_email(email_str, username_str, token).await {
-            error!("send_verification_email failed: {}", e);
-            return Err(e);
+    match user_result {
+        Ok(_) =>
+            Ok(
+                Json(
+                    serde_json::json!({
+            "message": "User created successfully. Please verify your email."
+        })
+                )
+            ),
+        Err(DieselError::RollbackTransaction) => {
+            Err(HttpError::server_error("Failed to send verification email".to_string()))
+        }
+        Err(e) => {
+            error!("Database error: {}", e);
+            Err(HttpError::server_error("User creation failed".to_string()))
         }
     }
-
-    Ok(
-        Json(
-            serde_json::json!({
-        "message": "User created successfully. Please verify your email."
-    })
-        )
-    )
 }
+
+// pub async fn signup_handler(
+//     State(state): State<Arc<AppState>>,
+//     Json(signup_data): Json<SignupRequest>
+// ) -> Result<impl IntoResponse, HttpError> {
+//     info!("Processing signup request for email: {}", signup_data.email);
+
+//     if let Err(validation_errors) = signup_data.validate() {
+//         return Err(HttpError::validation_error(validation_errors.to_string()));
+//     }
+
+//     let mut conn = state.conn()?;
+
+//     let user = create_user(
+//         &mut conn,
+//         signup_data.email.clone(),
+//         signup_data.name.clone(),
+//         signup_data.username.clone(),
+//         signup_data.password.clone()
+//     ).map_err(|e| {
+//         error!("Error creating user: {}", e);
+//         if e.to_string().contains("UNIQUE constraint failed") {
+//             HttpError::unique_constraint_validation(ErrorMessage::UserExists.to_string())
+//         } else {
+//             HttpError::server_error(ErrorMessage::UserCreationError.to_string())
+//         }
+//     })?;
+
+//     if let Some(token) = &user.verification_token {
+//         let email_str = &user.email;
+//         let username_str = &user.username;
+//         debug!("Email to send: {}", email_str);
+//         debug!("Username to send: {}", username_str);
+//         debug!("Token to send: {}", token);
+
+//         if let Err(e) = send_verification_email(email_str, username_str, token).await {
+//             error!("send_verification_email failed: {}", e);
+//             return Err(e);
+//         }
+//     }
+
+//     Ok(
+//         Json(
+//             serde_json::json!({
+//         "message": "User created successfully. Please verify your email."
+//     })
+//         )
+//     )
+// }
 #[derive(Deserialize)]
 pub struct VerifyQuery {
     token: String,

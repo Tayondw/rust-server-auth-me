@@ -8,6 +8,7 @@ use lettre::{
 };
 use axum::{ http::StatusCode, response::IntoResponse };
 use crate::errors::HttpError;
+use tracing::info;
 
 pub async fn send_email(
     to_email: &str,
@@ -29,6 +30,10 @@ pub async fn send_email(
         .map_err(|_| HttpError::server_error("Missing SMTP_PORT env variable"))?
         .parse()
         .map_err(|_| HttpError::server_error("Invalid SMTP_PORT value"))?;
+
+    let current_dir = env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("unknown"));
+    tracing::info!("Trying to read email template at: {}", template_path);
+    tracing::info!("Current working directory: {}", current_dir.display());
 
     let mut html_template = fs
         ::read_to_string(template_path)
