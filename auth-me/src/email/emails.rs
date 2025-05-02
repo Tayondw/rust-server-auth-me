@@ -1,6 +1,5 @@
 use super::send_email::send_email;
-use crate::errors::HttpError;
-use axum::{ http::StatusCode, response::IntoResponse };
+use crate::errors::{HttpError, ErrorMessage};
 
 pub async fn send_verification_email(
     to_email: &str,
@@ -18,9 +17,9 @@ pub async fn send_verification_email(
 
     send_email(to_email, subject, template_path, &placeholders)
         .await
-        .map_err(|e| {
+        .map_err(|e: HttpError| {
             tracing::error!("Failed to send verification email: {}", e);
-            HttpError::server_error("Failed to send verification email".to_string())
+            HttpError::server_error(ErrorMessage::EmailVerificationError.to_string())
         })?;
 
     Ok(())
@@ -31,16 +30,16 @@ fn create_verification_link(base_url: &str, token: &str) -> String {
     format!("{}?token={}", base_url, token)
 }
 
-// pub async fn send_welcome_email(
-//     to_email: &str,
-//     username: &str
-// ) -> Result<(), HttpError> {
-//     let subject = "Welcome to Application";
-//     let template_path = "src/mail/templates/Welcome-email.html";
-//     let placeholders = vec![("{{username}}".to_string(), username.to_string())];
+pub async fn send_welcome_email(
+    to_email: &str,
+    username: &str
+) -> Result<(), HttpError> {
+    let subject = "Welcome to Application";
+    let template_path = "src/email/templates/welcome-email.html";
+    let placeholders = vec![("{{username}}".to_string(), username.to_string())];
 
-//     send_email(to_email, subject, template_path, &placeholders).await
-// }
+    send_email(to_email, subject, template_path, &placeholders).await
+}
 
 // /// Sends a password reset email to a user who has forgotten their password
 // ///

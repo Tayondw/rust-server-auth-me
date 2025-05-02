@@ -6,9 +6,8 @@ use lettre::{
     SmtpTransport,
     Transport,
 };
-use axum::{ http::StatusCode, response::IntoResponse };
+
 use crate::errors::HttpError;
-use tracing::info;
 
 pub async fn send_email(
     to_email: &str,
@@ -31,10 +30,6 @@ pub async fn send_email(
         .parse()
         .map_err(|_| HttpError::server_error("Invalid SMTP_PORT value"))?;
 
-    let current_dir = env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("unknown"));
-    tracing::info!("Trying to read email template at: {}", template_path);
-    tracing::info!("Current working directory: {}", current_dir.display());
-
     let mut html_template = fs
         ::read_to_string(template_path)
         .map_err(|_| HttpError::server_error("Failed to read email template"))?;
@@ -55,11 +50,11 @@ pub async fn send_email(
         )
         .map_err(|_| HttpError::server_error("Failed to build email content"))?;
 
-    let creds = Credentials::new(smtp_username.clone(), smtp_password.clone());
+    let credits = Credentials::new(smtp_username.clone(), smtp_password.clone());
 
     let mailer = SmtpTransport::starttls_relay(&smtp_server)
         .map_err(|_| HttpError::server_error("Failed to connect to SMTP server"))?
-        .credentials(creds)
+        .credentials(credits)
         .port(smtp_port)
         .build();
 
