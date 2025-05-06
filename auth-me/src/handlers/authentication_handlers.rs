@@ -93,54 +93,6 @@ pub async fn signup_handler(
     }
 }
 
-// pub async fn signup_handler(
-//     State(state): State<Arc<AppState>>,
-//     Json(signup_data): Json<SignupRequest>
-// ) -> Result<impl IntoResponse, HttpError> {
-//     info!("Processing signup request for email: {}", signup_data.email);
-
-//     if let Err(validation_errors) = signup_data.validate() {
-//         return Err(HttpError::validation_error(validation_errors.to_string()));
-//     }
-
-//     let mut conn = state.conn()?;
-
-//     let user = create_user(
-//         &mut conn,
-//         signup_data.email.clone(),
-//         signup_data.name.clone(),
-//         signup_data.username.clone(),
-//         signup_data.password.clone()
-//     ).map_err(|e| {
-//         error!("Error creating user: {}", e);
-//         if e.to_string().contains("UNIQUE constraint failed") {
-//             HttpError::unique_constraint_validation(ErrorMessage::UserExists.to_string())
-//         } else {
-//             HttpError::server_error(ErrorMessage::UserCreationError.to_string())
-//         }
-//     })?;
-
-//     if let Some(token) = &user.verification_token {
-//         let email_str = &user.email;
-//         let username_str = &user.username;
-//         debug!("Email to send: {}", email_str);
-//         debug!("Username to send: {}", username_str);
-//         debug!("Token to send: {}", token);
-
-//         if let Err(e) = send_verification_email(email_str, username_str, token).await {
-//             error!("send_verification_email failed: {}", e);
-//             return Err(e);
-//         }
-//     }
-
-//     Ok(
-//         Json(
-//             serde_json::json!({
-//         "message": "User created successfully. Please verify your email."
-//     })
-//         )
-//     )
-// }
 #[derive(Deserialize)]
 pub struct VerifyQuery {
     token: String,
