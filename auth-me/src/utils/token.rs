@@ -5,6 +5,10 @@ use serde::{ Deserialize, Serialize };
 
 use crate::errors::{ ErrorMessage, HttpError };
 
+// Constants for token expiration
+const DEFAULT_ACCESS_TOKEN_EXPIRES: i64 = 900; // 15 minutes in seconds
+const DEFAULT_REFRESH_TOKEN_EXPIRES: i64 = 604800; // 7 days in seconds
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TokenClaims {
     pub sub: String,
@@ -34,7 +38,10 @@ pub fn create_token(
 }
 
 pub fn decode_token<T: Into<String>>(token: T, secret: &[u8]) -> Result<String, HttpError> {
-    let decode = decode::<TokenClaims>(
+    let decode: Result<
+        jsonwebtoken::TokenData<TokenClaims>,
+        jsonwebtoken::errors::Error
+    > = decode::<TokenClaims>(
         &token.into(),
         &DecodingKey::from_secret(secret),
         &Validation::new(Algorithm::HS256)
