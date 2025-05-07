@@ -70,6 +70,15 @@ fn validate_terms_acceptance(terms: &bool) -> Result<(), ValidationError> {
     if *terms { Ok(()) } else { Err(ValidationError::new("Terms must be accepted")) }
 }
 
+#[derive(Debug)]
+pub enum UserQuery<'a> {
+    Id(i32),
+    Email(&'a str),
+    Name(&'a str),
+    Username(&'a str),
+    Token(&'a str),
+}
+
 #[derive(Serialize, Deserialize, Validate)]
 pub struct RequestQueryDto {
     #[validate(range(min = 1))]

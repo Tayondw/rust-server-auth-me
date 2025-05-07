@@ -3,7 +3,7 @@ use serde::{ Deserialize, Serialize };
 use crate::schema::users;
 use chrono;
 
-#[derive(Queryable, Serialize, Debug, Selectable, Identifiable)]
+#[derive(Queryable, Serialize, Deserialize, Debug, Selectable, Identifiable, Clone)]
 #[diesel(table_name = users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct User {
