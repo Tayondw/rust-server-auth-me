@@ -24,6 +24,12 @@ pub struct LoginRequest {
     pub password: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserLoginResponse {
+    pub status: String,
+    pub token: String,
+}
+
 #[derive(Serialize, Deserialize, Validate)]
 pub struct VerifyEmailQueryDto {
     #[validate(length(min = 1, message = "Token is required."))]
