@@ -38,6 +38,7 @@ use tokio::net::TcpListener;
 #[derive(Clone)]
 pub struct AppState {
     pub db_pool: Pool<ConnectionManager<PgConnection>>,
+    pub config: Config,
 }
 
 #[tokio::main]
@@ -57,7 +58,7 @@ async fn main() -> Result<(), HttpError> {
         .map_err(|e| HttpError::server_error(format!("Failed to create pool: {}", e)))?;
 
     let authentication_pool: Pool<ConnectionManager<PgConnection>> = pool.clone();
-    let shared_state: Arc<AppState> = Arc::new(AppState { db_pool: pool });
+    let shared_state: Arc<AppState> = Arc::new(AppState { db_pool: pool, config: config.clone() });
 
     // Initialize tracing subscriber
     tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).try_init().ok();
