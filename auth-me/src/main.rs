@@ -76,7 +76,7 @@ async fn main() -> Result<(), HttpError> {
         .merge(user_routes(shared_state.clone()))
         .merge(post_routes())
         .merge(general_routes())
-        .nest("/api/auth", authentication_routes(&config, authentication_pool))
+        .nest("/api/auth", authentication_routes(shared_state.clone()))
         .route("/csrf-token", get(get_csrf_token))
         .with_state(shared_state)
         .layer(from_fn(csrf_middleware))
