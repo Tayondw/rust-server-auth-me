@@ -63,7 +63,7 @@ impl DatabaseConfig {
             jwt_secret: env::var("JWT_SECRET")?,
             jwt_refresh_secret: env::var("JWT_REFRESH_SECRET")?,
             rust_log: env::var("RUST_LOG")?,
-            schema: env::var("DB_SCHEMA")?,
+            schema: env::var("SCHEMA")?,
             jwt_expires_in: env
                 ::var("JWT_EXPIRES_IN")?
                 .parse()
