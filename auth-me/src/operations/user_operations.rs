@@ -11,7 +11,6 @@ pub fn create_user(
     username: String,
     password: String
 ) -> Result<User, Box<dyn std::error::Error>> {
-    let password: String = hash(password.as_bytes(), DEFAULT_COST)?;
     let token = Some(Uuid::new_v4().to_string());
 
     let new_user: NewUser = NewUser {
