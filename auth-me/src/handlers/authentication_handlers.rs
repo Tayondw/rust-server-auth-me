@@ -21,12 +21,12 @@ use time::Duration as TimeDuration;
 use crate::{
     schema::users::dsl::*,
     models::User,
-    auth::services::AuthService,
+    auth::services::{ AuthService, ServiceError },
     middleware::cookies::{
-        get_refresh_token,
-        remove_auth_cookies,
-        set_access_token,
-        set_refresh_token,
+        //   get_refresh_token,
+        //   remove_auth_cookies,
+        //   set_access_token,
+        //   set_refresh_token,
     },
     dto::{
         authentication_dtos::{ LoginRequest, SignupRequest, UserLoginResponse },
@@ -35,12 +35,13 @@ use crate::{
     errors::{ HttpError, ErrorMessage },
     AppState,
     operations::user_operations::create_user,
-    email::emails::send_verification_email,
+    email::emails::{ send_verification_email, send_welcome_email },
     database::DbConnExt,
     utils::{ password, token },
 };
 
 use token::*;
+use password::hash;
 
 pub async fn signup_handler(
     State(state): State<Arc<AppState>>,
@@ -52,17 +53,26 @@ pub async fn signup_handler(
         return Err(HttpError::validation_error(validation_errors.to_string()));
     }
 
+    // Hash password with argon2 before storing
+    let hashed_password = match hash(signup_data.password.clone()) {
+        Ok(hash) => hash,
+        Err(e) => {
+            tracing::error!("Password hashing error: {:?}", e);
+            return Err(HttpError::server_error("Failed to process password".to_string()));
+        }
+    };
+
     let mut conn = state.conn()?; // PooledConnection
 
     // Wrap in a transaction
     let user_result = conn.transaction::<User, DieselError, _>(|conn| {
-        // Create user
+        // Create user with the hashed password
         let user = create_user(
             conn,
             signup_data.email.clone(),
             signup_data.name.clone(),
             signup_data.username.clone(),
-            signup_data.password.clone()
+            hashed_password // Use the argon2 hashed password instead of raw password
         ).map_err(|e| {
             tracing::error!("Error creating user: {}", e);
             DieselError::RollbackTransaction
@@ -109,158 +119,148 @@ pub async fn signup_handler(
     }
 }
 
-#[derive(Deserialize)]
-pub struct VerifyQuery {
-    token: String,
+#[derive(Serialize, Deserialize, Validate)]
+pub struct VerifyEmailQuery {
+    #[validate(length(min = 1, message = "Token is required."))]
+    pub token: String,
 }
 
 pub async fn verify_email_handler(
     State(state): State<Arc<AppState>>,
-    Query(query): Query<VerifyQuery>
+    Query(query): Query<VerifyEmailQuery>
 ) -> Result<impl IntoResponse, HttpError> {
+    use crate::schema::users::dsl::*;
+    use diesel::prelude::*;
+
+    // Step 1: Validate query
+    query.validate().map_err(|e| HttpError::bad_request(e.to_string()))?;
+
     let mut conn = state.conn()?;
 
-    // Look up user by token
-    let result = diesel
-        ::update(users.filter(verification_token.eq(&query.token)))
+    // Step 2: Look up user by token
+    let user: User = users
+        .filter(verification_token.eq(&query.token))
+        .first::<User>(&mut conn)
+        .map_err(|_| HttpError::unauthorized("Invalid verification token"))?;
+
+    // Step 3: Mark user as verified and remove token
+    let updated_user = diesel
+        ::update(users.filter(id.eq(user.id)))
         .set((
             is_verified.eq(true),
             verification_token.eq::<Option<String>>(None),
             updated_at.eq(Utc::now().naive_utc()),
         ))
-        .get_result::<User>(&mut conn);
+        .get_result::<User>(&mut conn)
+        .map_err(|e| HttpError::server_error(e.to_string()))?;
 
-    match result {
-        Ok(user) =>
-            Ok(
-                Json(
-                    json!({
-            "message": "Email verified successfully",
-            "user_id": user.id
-        })
-                )
-            ),
-        Err(_) => Err(HttpError::not_found("Invalid or expired token")),
+    // Step 4: Send welcome email
+    if let Err(e) = send_welcome_email(&updated_user.email, &updated_user.name).await {
+        eprintln!("Failed to send welcome email: {}", e);
     }
+
+    // Step 5: Generate JWT token
+    let jwt = create_token(
+        &updated_user.id.to_string(),
+        state.config.database.jwt_secret.as_bytes(),
+        state.config.database.jwt_expires_in
+    ).map_err(|e| HttpError::server_error(e.to_string()))?;
+
+    // Step 6: Set Cookie
+    let cookie_duration = time::Duration::minutes(state.config.database.jwt_expires_in * 60);
+    let cookie = Cookie::build(("token", jwt.clone()))
+        .path("/")
+        .max_age(cookie_duration)
+        .http_only(true)
+        .build();
+
+    let mut headers = HeaderMap::new();
+    headers.append(
+        header::SET_COOKIE,
+        cookie
+            .to_string()
+            .parse()
+            .map_err(|_| HttpError::server_error("Failed to parse cookie".to_string()))?
+    );
+
+    // 7. Return success with cookie header
+    let response = (
+        headers,
+        Json(
+            json!({
+            "message": "Email verified successfully",
+            "user_id": updated_user.id,
+        })
+        ),
+    );
+
+    Ok(response)
 }
 
 pub async fn login_handler(
-    Extension(state): Extension<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
+    Extension(auth_service): Extension<Arc<AuthService>>, // Add this to get the auth_service
     Json(body): Json<LoginRequest>
 ) -> Result<impl IntoResponse, HttpError> {
     body.validate().map_err(|e| HttpError::bad_request(e.to_string()))?;
 
-    let result = state.config.database
-        .get_user(UserQuery::Email(&body.email))
+    // Use the AuthService to validate credentials
+    let user = auth_service.validate_credentials(&body.email, &body.password).await.map_err(|e| {
+        match e {
+            ServiceError::HttpError(http_error) => http_error,
+            _ => HttpError::server_error(e.to_string()),
+        }
+    })?;
+
+    // Generate tokens using AuthService
+    let access_token = auth_service
+        .generate_access_token(&user.id.to_string())
         .map_err(|e| HttpError::server_error(e.to_string()))?;
 
-    let user = result.ok_or(HttpError::bad_request(ErrorMessage::WrongCredentials.to_string()))?;
+    let refresh_token = auth_service
+        .generate_refresh_token(&user.id.to_string())
+        .map_err(|e| HttpError::server_error(e.to_string()))?;
 
-    let password_matched = password
-        ::compare(&body.password, &user.password)
-        .map_err(|_| HttpError::bad_request(ErrorMessage::WrongCredentials.to_string()))?;
+    // Set up cookies
+    let access_cookie_duration = TimeDuration::minutes(15); // 15 minutes for access token
+    let refresh_cookie_duration = TimeDuration::days(7); // 7 days for refresh token
 
-    if password_matched {
-        let token = create_token(
-            &user.id.to_string(),
-            &state.config.database.jwt_secret.as_bytes(),
-            state.config.database.jwt_expires_in
-        ).map_err(|e| HttpError::server_error(e.to_string()))?;
+    // Create access token cookie
+    let mut access_cookie = Cookie::new("access_token", access_token.clone());
+    access_cookie.set_path("/");
+    access_cookie.set_max_age(access_cookie_duration);
+    access_cookie.set_http_only(true);
+    access_cookie.set_same_site(cookie::SameSite::Strict);
+    access_cookie.secure();
 
-        let cookie_duration = TimeDuration::minutes(state.config.database.jwt_expires_in * 60);
-        let mut cookie = Cookie::new("token", token.clone());
-        cookie.set_path("/");
-        cookie.set_max_age(cookie_duration);
-        cookie.set_http_only(true);
+    // Create refresh token cookie
+    let mut refresh_cookie = Cookie::new("refresh_token", refresh_token);
+    refresh_cookie.set_path("/");
+    refresh_cookie.set_max_age(refresh_cookie_duration);
+    refresh_cookie.set_http_only(true);
+    refresh_cookie.set_same_site(cookie::SameSite::Strict);
+    refresh_cookie.secure();
 
-        let response = Json(UserLoginResponse {
-            status: "success".to_string(),
-            token,
-        });
+    // Create the response
+    let response = Json(UserLoginResponse {
+        status: "success".to_string(),
+        token: access_token,
+    });
 
-        let mut headers = HeaderMap::new();
-        headers.append(header::SET_COOKIE, cookie.to_string().parse().unwrap());
+    // Add cookies to the response
+    let mut headers = HeaderMap::new();
+    headers.append(header::SET_COOKIE, access_cookie.to_string().parse().unwrap());
+    headers.append(header::SET_COOKIE, refresh_cookie.to_string().parse().unwrap());
 
-        let mut response = response.into_response();
-        response.headers_mut().extend(headers);
+    let mut response = response.into_response();
+    response.headers_mut().extend(headers);
 
-        Ok(response)
-    } else {
-        Err(HttpError::bad_request(ErrorMessage::WrongCredentials.to_string()))
-    }
+    Ok(response)
 }
 
-// pub async fn login_handler(
-//     State(auth_service): State<Arc<AuthService>>,
-//     cookies: Cookies,
-//     Json(credentials): Json<LoginRequest>
-// ) -> impl IntoResponse {
-//     match auth_service.validate_credentials(&credentials.email, &credentials.password).await {
-//         Ok(user) => {
-//             let user_id = user.id.to_string();
-//             match auth_service.generate_access_token(&user_id) {
-//                 Ok(access_token) => {
-//                     match auth_service.generate_refresh_token(&user_id) {
-//                         Ok(refresh_token) => {
-//                             set_access_token(&cookies, access_token, auth_service.config());
-//                             set_refresh_token(&cookies, refresh_token, auth_service.config());
-
-//                             (
-//                                 StatusCode::OK,
-//                                 Json(
-//                                     json!({
-//                                     "status": "success",
-//                                     "message": "Successfully logged in",
-//                                     "user": {
-//                                         "id": user.id,
-//                                         "username": user.username,
-//                                         "name": user.name,
-//                                         "email": user.email
-//                                     }
-//                                 })
-//                                 ),
-//                             )
-//                         }
-//                         Err(_) =>
-//                             (
-//                                 StatusCode::INTERNAL_SERVER_ERROR,
-//                                 Json(
-//                                     json!({
-//                                 "status": "error",
-//                                 "message": "Failed to generate refresh token"
-//                             })
-//                                 ),
-//                             ),
-//                     }
-//                 }
-//                 Err(_) =>
-//                     (
-//                         StatusCode::INTERNAL_SERVER_ERROR,
-//                         Json(
-//                             json!({
-//                         "status": "error",
-//                         "message": "Failed to generate access token"
-//                     })
-//                         ),
-//                     ),
-//             }
-//         }
-//         Err(_) =>
-//             (
-//                 StatusCode::UNAUTHORIZED,
-//                 Json(
-//                     json!({
-//                 "status": "error",
-//                 "message": "Invalid username or password"
-//             })
-//                 ),
-//             ),
-//     }
-// }
-
 pub async fn refresh_token_handler(
-    State(auth_service): State<Arc<AuthService>>,
-    cookies: Cookies
+    Extension(auth_service): Extension<Arc<AuthService>>, // Use Extension instead of State
+    mut cookies: Cookies
 ) -> impl IntoResponse {
     let Some(refresh_token) = get_refresh_token(&cookies) else {
         return unauthorized("No refresh token found");
@@ -269,7 +269,7 @@ pub async fn refresh_token_handler(
     let claims = match auth_service.verify_refresh_token(&refresh_token) {
         Ok(claims) => claims,
         Err(_) => {
-            remove_auth_cookies(&cookies);
+            remove_auth_cookies(&mut cookies);
             return unauthorized("Invalid refresh token");
         }
     };
@@ -288,116 +288,84 @@ pub async fn refresh_token_handler(
         }
     };
 
-    set_access_token(&cookies, new_access_token, auth_service.config());
-    set_refresh_token(&cookies, new_refresh_token, auth_service.config());
+    // Set up cookies
+    let access_cookie_duration = TimeDuration::minutes(15); // 15 minutes for access token
+    let refresh_cookie_duration = TimeDuration::days(7); // 7 days for refresh token
+
+    // Create access token cookie
+    let mut access_cookie = Cookie::new("access_token", new_access_token);
+    access_cookie.set_path("/");
+    access_cookie.set_max_age(access_cookie_duration);
+    access_cookie.set_http_only(true);
+    access_cookie.set_same_site(cookie::SameSite::Strict);
+    access_cookie.secure();
+
+    // Create refresh token cookie
+    let mut refresh_cookie = Cookie::new("refresh_token", new_refresh_token);
+    refresh_cookie.set_path("/");
+    refresh_cookie.set_max_age(refresh_cookie_duration);
+    refresh_cookie.set_http_only(true);
+    refresh_cookie.set_same_site(cookie::SameSite::Strict);
+    refresh_cookie.secure();
+
+    // Add cookies
+    cookies.add(access_cookie);
+    cookies.add(refresh_cookie);
 
     (
         StatusCode::OK,
         Json(
             json!({
-            "status": "success",
-            "message": "Tokens refreshed successfully"
-        })
+                "status": "success",
+                "message": "Tokens refreshed successfully"
+            })
         ),
     )
 }
 
+// Helper functions
+fn get_refresh_token(cookies: &Cookies) -> Option<String> {
+    cookies.get("refresh_token").map(|c| c.value().to_string())
+}
+
+fn remove_auth_cookies(cookies: &mut Cookies) {
+    // Remove access token cookie by creating a new cookie with the same name and setting it to expire immediately
+    let mut access_cookie = Cookie::new("access_token", "");
+    access_cookie.set_path("/");
+    access_cookie.set_max_age(TimeDuration::new(0, 0));
+    access_cookie.set_http_only(true);
+    cookies.add(access_cookie);
+
+    // Remove refresh token cookie by creating a new cookie with the same name and setting it to expire immediately
+    let mut refresh_cookie = Cookie::new("refresh_token", "");
+    refresh_cookie.set_path("/");
+    refresh_cookie.set_max_age(TimeDuration::new(0, 0));
+    refresh_cookie.set_http_only(true);
+    cookies.add(refresh_cookie);
+}
+
 fn unauthorized(message: &str) -> (StatusCode, Json<serde_json::Value>) {
-    (StatusCode::UNAUTHORIZED, Json(json!({ "status": "error", "message": message })))
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(json!({
+            "status": "error",
+            "message": message
+        })),
+    )
 }
 
 fn internal_error(message: &str) -> (StatusCode, Json<serde_json::Value>) {
-    (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "status": "error", "message": message })))
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({
+            "status": "error",
+            "message": message
+        })),
+    )
 }
 
-// pub async fn refresh_token_handler(
-//     State(auth_service): State<Arc<AuthService>>,
-//     cookies: Cookies
-// ) -> impl IntoResponse {
-//     match get_refresh_token(&cookies) {
-//         Some(refresh_token) => {
-//             match auth_service.verify_refresh_token(&refresh_token) {
-//                 Ok(claims) => {
-//                     // Generate new access token and refresh token
-//                     match auth_service.generate_access_token(&claims.sub) {
-//                         Ok(new_access_token) => {
-//                             match auth_service.generate_refresh_token(&claims.sub) {
-//                                 Ok(new_refresh_token) => {
-//                                     // Set both new tokens in cookies
-//                                     set_access_token(
-//                                         &cookies,
-//                                         new_access_token,
-//                                         auth_service.config()
-//                                     );
-//                                     set_refresh_token(
-//                                         &cookies,
-//                                         new_refresh_token,
-//                                         auth_service.config()
-//                                     );
-
-//                                     (
-//                                         StatusCode::OK,
-//                                         Json(
-//                                             json!({
-//                                             "status": "success",
-//                                             "message": "Tokens refreshed successfully"
-//                                         })
-//                                         ),
-//                                     )
-//                                 }
-//                                 Err(_) =>
-//                                     (
-//                                         StatusCode::INTERNAL_SERVER_ERROR,
-//                                         Json(
-//                                             json!({
-//                                         "status": "error",
-//                                         "message": "Failed to generate new refresh token"
-//                                     })
-//                                         ),
-//                                     ),
-//                             }
-//                         }
-//                         Err(_) =>
-//                             (
-//                                 StatusCode::INTERNAL_SERVER_ERROR,
-//                                 Json(
-//                                     json!({
-//                                 "status": "error",
-//                                 "message": "Failed to generate new access token"
-//                             })
-//                                 ),
-//                             ),
-//                     }
-//                 }
-//                 Err(_) => {
-//                     remove_auth_cookies(&cookies);
-//                     (
-//                         StatusCode::UNAUTHORIZED,
-//                         Json(
-//                             json!({
-//                             "status": "error",
-//                             "message": "Invalid refresh token"
-//                         })
-//                         ),
-//                     )
-//                 }
-//             }
-//         }
-//         None =>
-//             (
-//                 StatusCode::UNAUTHORIZED,
-//                 Json(
-//                     json!({
-//                 "status": "error",
-//                 "message": "No refresh token found"
-//             })
-//                 ),
-//             ),
-//     }
-// }
-
-pub async fn logout_handler(cookies: Cookies) -> impl IntoResponse {
-    remove_auth_cookies(&cookies);
+pub async fn logout_handler(mut cookies: Cookies) -> impl IntoResponse {
+    remove_auth_cookies(&mut cookies);
     (
         StatusCode::OK,
         Json(
@@ -410,6 +378,7 @@ pub async fn logout_handler(cookies: Cookies) -> impl IntoResponse {
 }
 
 // Keep the protected handler function
-pub async fn protected_handler() -> impl IntoResponse {
+pub async fn protected_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let auth_service = AuthService::new(&state.config, state.db_pool.clone());
     (axum::http::StatusCode::OK, Json(json!({ "message": "This is a protected route" })))
 }
