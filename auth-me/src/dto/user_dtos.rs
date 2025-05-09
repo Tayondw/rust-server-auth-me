@@ -80,7 +80,7 @@ pub enum UserQuery<'a> {
 }
 
 #[derive(Serialize, Deserialize, Validate)]
-pub struct RequestQueryDto {
+pub struct RequestQuery {
     #[validate(range(min = 1))]
     pub page: Option<usize>,
 
