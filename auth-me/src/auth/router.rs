@@ -1,5 +1,14 @@
-use axum::{ Router, routing::{ post, get }, middleware };
+use axum::{
+    Router,
+    routing::{ post, get },
+    middleware,
+    middleware::{ from_fn, Next },
+    extract::{ State, Extension },
+    http::{ Request, StatusCode },
+    body::Body,
+};
 use std::sync::Arc;
+use tower_cookies::Cookies;
 use diesel::{ PgConnection, r2d2::{ Pool, ConnectionManager } };
 
 use crate::{
@@ -10,23 +19,43 @@ use crate::{
     config::Config,
 };
 
-pub fn authentication_routes(
-    config: &Config,
-    pool: Pool<ConnectionManager<PgConnection>>
-) -> Router<Arc<AppState>> {
-    let authentication_service: Arc<AuthService> = Arc::new(AuthService::new(config, pool));
+pub fn authentication_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
+    // Creating the auth_service and wrapping it in an Arc for shared ownership
+    let auth_service = Arc::new(AuthService::new(&state.config, state.db_pool.clone()));
 
-    // Create protected routes
+    // Protected routes that require authentication
     let protected_routes = Router::new()
         .route("/protected", get(protected_handler))
-        .route("/refresh", post(refresh_token_handler))
+        .route(
+            "/refresh",
+            post({
+                let auth_service_clone = auth_service.clone();
+                move |cookies: Cookies| {
+                    // Use Extension instead of State to match the function signature
+                    refresh_token_handler(Extension(auth_service_clone.clone()), cookies)
+                }
+            })
+        )
         .route("/logout", post(logout_handler))
-        .layer(middleware::from_fn_with_state(authentication_service.clone(), auth_middleware));
+        .layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
 
-    // Combine with public routes
+    // Main router, with a login route and the protected routes merged
     Router::new()
         .route("/login", post(login_handler))
         .merge(protected_routes)
-        .with_state(authentication_service)
+        .with_state(state) // Global state passed through here
         .layer(cookie_layer())
+        .layer(
+            from_fn(move |mut req: Request<Body>, next: Next| {
+                let auth_service = auth_service.clone(); // Clone `auth_service` here
+
+                async move {
+                    // Insert the cloned auth_service into the request's extensions
+                    req.extensions_mut().insert(auth_service);
+
+                    // Forward the request with the extension
+                    next.run(req).await
+                }
+            })
+        )
 }
