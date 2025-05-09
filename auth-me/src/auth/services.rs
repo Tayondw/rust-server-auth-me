@@ -2,7 +2,6 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 use serde::{ Deserialize, Serialize };
 use time::{ OffsetDateTime, Duration };
 use uuid::Uuid;
-use bcrypt::verify;
 use diesel::{ PgConnection, r2d2::{ Pool, ConnectionManager }, prelude::* };
 use crate::{ config::Config, models::User, errors::{ HttpError, ErrorMessage } };
 
@@ -16,20 +15,15 @@ pub struct TokenClaims {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServiceError {
-    #[error(transparent)] 
-    HttpError(#[from] HttpError),
+    #[error(transparent)] HttpError(#[from] HttpError),
 
-    #[error("Database error: {0}")] 
-    DatabaseError(#[from] diesel::result::Error),
+    #[error("Database error: {0}")] DatabaseError(#[from] diesel::result::Error),
 
-    #[error("Password hash error: {0}")] 
-    BcryptError(#[from] bcrypt::BcryptError),
+    #[error("Password hash error: {0}")] BcryptError(#[from] bcrypt::BcryptError),
 
-    #[error("Connection pool error: {0}")] 
-    PoolError(#[from] diesel::r2d2::PoolError),
+    #[error("Connection pool error: {0}")] PoolError(#[from] diesel::r2d2::PoolError),
 
-    #[error("Token error: {0}")] 
-    TokenError(#[from] jsonwebtoken::errors::Error),
+    #[error("Token error: {0}")] TokenError(#[from] jsonwebtoken::errors::Error),
 }
 
 pub struct AuthService {
@@ -71,14 +65,20 @@ impl AuthService {
                 )
             })?;
 
-        if verify(password_input, &user.password)? {
-            Ok(user)
-        } else {
-            Err(
-                ServiceError::HttpError(
-                    HttpError::unauthorized(ErrorMessage::WrongCredentials.to_string())
-                )
-            )
+        match crate::utils::password::compare(password_input, &user.password) {
+            Ok(true) => Ok(user),
+            Ok(false) =>
+                Err(
+                    ServiceError::HttpError(
+                        HttpError::unauthorized(ErrorMessage::WrongCredentials.to_string())
+                    )
+                ),
+            Err(_) =>
+                Err(
+                    ServiceError::HttpError(
+                        HttpError::server_error("Password comparison error".to_string())
+                    )
+                ),
         }
     }
 
