@@ -57,7 +57,6 @@ async fn main() -> Result<(), HttpError> {
         .build(manager)
         .map_err(|e| HttpError::server_error(format!("Failed to create pool: {}", e)))?;
 
-    let authentication_pool: Pool<ConnectionManager<PgConnection>> = pool.clone();
     let shared_state: Arc<AppState> = Arc::new(AppState { db_pool: pool, config: config.clone() });
 
     // Initialize tracing subscriber
