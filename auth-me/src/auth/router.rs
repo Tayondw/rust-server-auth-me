@@ -1,22 +1,21 @@
+use std::sync::Arc;
+
 use axum::{
     Router,
     routing::{ post, get },
     middleware,
     middleware::{ from_fn, Next },
-    extract::{ State, Extension },
-    http::{ Request, StatusCode },
+    extract::Extension,
+    http::Request,
     body::Body,
 };
-use std::sync::Arc;
 use tower_cookies::Cookies;
-use diesel::{ PgConnection, r2d2::{ Pool, ConnectionManager } };
 
 use crate::{
     auth::{ services::AuthService, middleware::auth_middleware },
     middleware::cookies::cookie_layer,
     handlers::authentication_handlers::*,
     AppState,
-    config::Config,
 };
 
 pub fn authentication_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
@@ -31,7 +30,6 @@ pub fn authentication_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             post({
                 let auth_service_clone = auth_service.clone();
                 move |cookies: Cookies| {
-                    // Use Extension instead of State to match the function signature
                     refresh_token_handler(Extension(auth_service_clone.clone()), cookies)
                 }
             })
@@ -43,16 +41,13 @@ pub fn authentication_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
     Router::new()
         .route("/login", post(login_handler))
         .merge(protected_routes)
-        .with_state(state) // Global state passed through here
+        .with_state(state)
         .layer(cookie_layer())
         .layer(
             from_fn(move |mut req: Request<Body>, next: Next| {
                 let auth_service = auth_service.clone(); // Clone `auth_service` here
-
                 async move {
-                    // Insert the cloned auth_service into the request's extensions
                     req.extensions_mut().insert(auth_service);
-
                     // Forward the request with the extension
                     next.run(req).await
                 }
