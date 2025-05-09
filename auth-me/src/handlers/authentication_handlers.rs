@@ -1,43 +1,33 @@
+use std::sync::Arc;
+
 use axum::{
-    extract::{ Query, State, Request },
+    extract::{ Query, State },
     response::IntoResponse,
     Json,
     http::{ StatusCode, header, HeaderMap },
     Extension,
-    middleware::Next,
 };
 use diesel::{ prelude::*, result::Error as DieselError };
 use tower_cookies::Cookies;
-use cookie::{ SameSite, Cookie };
+use cookie::Cookie;
 use serde_json::json;
-use std::sync::Arc;
 use tracing::{ info, error };
 use validator::Validate;
 use serde::{ Deserialize, Serialize };
-use chrono::{ Duration, Utc };
-use jsonwebtoken::{ decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation };
+use chrono::Utc;
 use time::Duration as TimeDuration;
 
 use crate::{
-    schema::users::dsl::*,
     models::User,
-    auth::services::{ AuthService, ServiceError },
-    middleware::cookies::{
-        //   get_refresh_token,
-        //   remove_auth_cookies,
-        //   set_access_token,
-        //   set_refresh_token,
-    },
-    dto::{
-        authentication_dtos::{ LoginRequest, SignupRequest, UserLoginResponse },
-        user_dtos::UserQuery,
-    },
-    errors::{ HttpError, ErrorMessage },
     AppState,
+    database::DbConnExt,
+    auth::services::{ AuthService, ServiceError },
+    utils::{ password, token },
+    middleware::cookies::{ get_refresh_token, remove_auth_cookies },
+    dto::authentication_dtos::{ LoginRequest, SignupRequest, UserLoginResponse },
     operations::user_operations::create_user,
     email::emails::{ send_verification_email, send_welcome_email },
-    database::DbConnExt,
-    utils::{ password, token },
+    errors::{ HttpError, ErrorMessage },
 };
 
 use token::*;
@@ -199,7 +189,7 @@ pub async fn verify_email_handler(
 
 pub async fn login_handler(
     State(state): State<Arc<AppState>>,
-    Extension(auth_service): Extension<Arc<AuthService>>, // Add this to get the auth_service
+    Extension(auth_service): Extension<Arc<AuthService>>,
     Json(body): Json<LoginRequest>
 ) -> Result<impl IntoResponse, HttpError> {
     body.validate().map_err(|e| HttpError::bad_request(e.to_string()))?;
@@ -259,7 +249,7 @@ pub async fn login_handler(
 }
 
 pub async fn refresh_token_handler(
-    Extension(auth_service): Extension<Arc<AuthService>>, // Use Extension instead of State
+    Extension(auth_service): Extension<Arc<AuthService>>,
     mut cookies: Cookies
 ) -> impl IntoResponse {
     let Some(refresh_token) = get_refresh_token(&cookies) else {
@@ -323,27 +313,6 @@ pub async fn refresh_token_handler(
     )
 }
 
-// Helper functions
-fn get_refresh_token(cookies: &Cookies) -> Option<String> {
-    cookies.get("refresh_token").map(|c| c.value().to_string())
-}
-
-fn remove_auth_cookies(cookies: &mut Cookies) {
-    // Remove access token cookie by creating a new cookie with the same name and setting it to expire immediately
-    let mut access_cookie = Cookie::new("access_token", "");
-    access_cookie.set_path("/");
-    access_cookie.set_max_age(TimeDuration::new(0, 0));
-    access_cookie.set_http_only(true);
-    cookies.add(access_cookie);
-
-    // Remove refresh token cookie by creating a new cookie with the same name and setting it to expire immediately
-    let mut refresh_cookie = Cookie::new("refresh_token", "");
-    refresh_cookie.set_path("/");
-    refresh_cookie.set_max_age(TimeDuration::new(0, 0));
-    refresh_cookie.set_http_only(true);
-    cookies.add(refresh_cookie);
-}
-
 fn unauthorized(message: &str) -> (StatusCode, Json<serde_json::Value>) {
     (
         StatusCode::UNAUTHORIZED,
@@ -378,7 +347,6 @@ pub async fn logout_handler(mut cookies: Cookies) -> impl IntoResponse {
 }
 
 // Keep the protected handler function
-pub async fn protected_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let auth_service = AuthService::new(&state.config, state.db_pool.clone());
+pub async fn protected_handler() -> impl IntoResponse {
     (axum::http::StatusCode::OK, Json(json!({ "message": "This is a protected route" })))
 }
