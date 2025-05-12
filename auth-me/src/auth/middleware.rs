@@ -59,7 +59,6 @@ pub async fn auth_middleware(
     };
 
     // Add the user ID to request extensions
-    // This is simpler than fetching the full user, but still provides context
     request.extensions_mut().insert(AuthUser { user_id });
 
     // Continue with the request
