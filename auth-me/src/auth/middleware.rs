@@ -70,8 +70,3 @@ pub async fn auth_middleware(
 pub struct AuthUser {
     pub user_id: String,
 }
-
-// extract access token from cookies
-fn get_access_token(cookies: &Cookies) -> Option<String> {
-    cookies.get("access_token").map(|c| c.value().to_string())
-}
