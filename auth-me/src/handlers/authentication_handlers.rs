@@ -21,7 +21,7 @@ use crate::{
     models::User,
     AppState,
     database::DbConnExt,
-    auth::services::{ AuthService, ServiceError },
+    auth::{ services::{ AuthService, ServiceError }, middleware::AuthUser },
     utils::{ password, token },
     middleware::cookies::{ get_refresh_token, remove_auth_cookies },
     dto::authentication_dtos::{ LoginRequest, SignupRequest, UserLoginResponse },
@@ -346,7 +346,14 @@ pub async fn logout_handler(mut cookies: Cookies) -> impl IntoResponse {
     )
 }
 
-// Keep the protected handler function
-pub async fn protected_handler() -> impl IntoResponse {
-    (axum::http::StatusCode::OK, Json(json!({ "message": "This is a protected route" })))
+pub async fn protected_handler(Extension(user): Extension<AuthUser>) -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(
+            json!({ 
+        "message": "This is a protected route",
+        "user_id": user.user_id 
+    })
+        ),
+    )
 }
