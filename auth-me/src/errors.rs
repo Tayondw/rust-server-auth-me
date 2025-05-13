@@ -29,7 +29,8 @@ pub enum ErrorMessage {
     UserNoLongerExists,
     InvalidHashFormat,
     HashingError,
-    InvalidEmailFormat,
+    InvalidFromEmailFormat,
+    InvalidRecipientEmailFormat,
     ExceededMaxPasswordLength(usize),
     DeleteUserError,
     PostsByUserError,
@@ -40,7 +41,6 @@ pub enum ErrorMessage {
     PostNotFound,
     DeletePostError,
     NotFound,
-    SignUpError,
     EmailVerificationError,
 }
 
@@ -60,10 +60,11 @@ impl ErrorMessage {
             ErrorMessage::EmptyPassword => "Password cannot be empty".to_string(),
             ErrorMessage::ExceededMaxPasswordLength(max_length) =>
                 format!("Passwords must not be more than {} characters", max_length),
-            ErrorMessage::HashingError => "Error occured while hashing the password".to_string(),
+            ErrorMessage::HashingError => "Error occurred while hashing the password".to_string(),
             ErrorMessage::InternalServerError =>
                 "Server Error. Please try again later.".to_string(),
-            ErrorMessage::InvalidEmailFormat => "Email format is invalid".to_string(),
+            ErrorMessage::InvalidFromEmailFormat => "Invalid from email format".to_string(),
+            ErrorMessage::InvalidRecipientEmailFormat => "Invalid recipient email format".to_string(),
             ErrorMessage::InvalidHashFormat => "Invalid password hash format".to_string(),
             ErrorMessage::InvalidToken => "Authentication token is invalid or expired".to_string(),
             ErrorMessage::NotFound => "The requested resource could not be found".to_string(),
@@ -73,7 +74,6 @@ impl ErrorMessage {
             ErrorMessage::PostNotFound => "Post belonging to this id does not exist".to_string(),
             ErrorMessage::PostUpdateError => "Unable to update post".to_string(),
             ErrorMessage::PostsByUserError => "Error fetching posts for this user".to_string(),
-            ErrorMessage::SignUpError => "Validation error during signup".to_string(),
             ErrorMessage::TokenNotProvided =>
                 "You are not logged in, please provide a token".to_string(),
             ErrorMessage::UserCreationError => "Unable to create user.".to_string(),
