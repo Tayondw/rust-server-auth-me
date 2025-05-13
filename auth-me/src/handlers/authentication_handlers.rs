@@ -131,7 +131,7 @@ pub async fn verify_email_handler(
     let user: User = users
         .filter(verification_token.eq(&query.token))
         .first::<User>(&mut conn)
-        .map_err(|_| HttpError::unauthorized("Invalid verification token"))?;
+        .map_err(|_| HttpError::unauthorized(ErrorMessage::InvalidToken.to_string()))?;
 
     // Step 3: Mark user as verified and remove token
     let updated_user = diesel
