@@ -7,31 +7,34 @@ use axum::{
     http::{ StatusCode, header, HeaderMap },
     Extension,
 };
+
 use diesel::{ prelude::*, result::Error as DieselError };
+
 use tower_cookies::Cookies;
 use cookie::Cookie;
+
 use serde_json::json;
-use tracing::{ info, error };
-use validator::Validate;
 use serde::{ Deserialize, Serialize };
+
 use chrono::Utc;
 use time::Duration as TimeDuration;
+
+use tracing::{ info, error };
+use validator::Validate;
+
 
 use crate::{
     models::User,
     AppState,
     database::DbConnExt,
-    auth::{ services::{ AuthService, ServiceError }, middleware::AuthUser },
-    utils::{ password, token },
+    auth::middleware::AuthUser,
+    utils::{ password::hash, token::* },
     middleware::cookies::{ get_refresh_token, remove_auth_cookies },
     dto::authentication_dtos::{ LoginRequest, SignupRequest, UserLoginResponse },
     operations::user_operations::create_user,
     email::emails::{ send_verification_email, send_welcome_email },
     errors::{ HttpError, ErrorMessage },
 };
-
-use token::*;
-use password::hash;
 
 pub async fn signup_handler(
     State(state): State<Arc<AppState>>,
@@ -150,11 +153,10 @@ pub async fn verify_email_handler(
     }
 
     // Step 5: Generate JWT token
-    let jwt = create_token(
-        &updated_user.id.to_string(),
-        state.config.database.jwt_secret.as_bytes(),
-        state.config.database.jwt_expires_in
-    ).map_err(|e| HttpError::server_error(e.to_string()))?;
+    let auth_service = AuthService::new(&state.config, state.db_pool.clone());
+    let jwt = auth_service
+        .generate_access_token(&updated_user.id.to_string())
+        .map_err(|e| HttpError::server_error(e.to_string()))?;
 
     // Step 6: Set Cookie
     let cookie_duration = time::Duration::minutes(state.config.database.jwt_expires_in * 60);
