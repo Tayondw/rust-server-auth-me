@@ -42,6 +42,7 @@ pub enum ErrorMessage {
     DeletePostError,
     NotFound,
     EmailVerificationError,
+    PasswordComparison
 }
 
 impl ToString for ErrorMessage {
@@ -70,6 +71,8 @@ impl ErrorMessage {
             ErrorMessage::NotFound => "The requested resource could not be found".to_string(),
             ErrorMessage::PermissionDenied =>
                 "You are not allowed to perform this action".to_string(),
+            ErrorMessage::PasswordComparison =>
+                "Password comparison error".to_string(),
             ErrorMessage::PostCreationError => "Unable to create post.".to_string(),
             ErrorMessage::PostNotFound => "Post belonging to this id does not exist".to_string(),
             ErrorMessage::PostUpdateError => "Unable to update post".to_string(),
