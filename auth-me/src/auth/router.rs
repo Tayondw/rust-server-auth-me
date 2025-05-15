@@ -12,10 +12,11 @@ use axum::{
 use tower_cookies::Cookies;
 
 use crate::{
-    auth::{ services::AuthService, middleware::auth_middleware },
+    auth::middleware::auth_middleware,
     middleware::cookies::cookie_layer,
     handlers::authentication_handlers::*,
     AppState,
+    utils::token::AuthService,
 };
 
 pub fn authentication_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {

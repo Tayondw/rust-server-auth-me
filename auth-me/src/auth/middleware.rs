@@ -9,7 +9,7 @@ use axum::{
 };
 use tower_cookies::Cookies;
 
-use crate::auth::services::AuthService;
+use crate::utils::token::AuthService;
 
 pub async fn auth_middleware(
     cookies: Cookies,
