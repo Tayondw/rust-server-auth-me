@@ -7,12 +7,9 @@ use diesel::{ PgConnection, r2d2::{ Pool, ConnectionManager }, prelude::* };
 
 use crate::{ config::Config, models::User, errors::{ ErrorMessage, HttpError } };
 
-// // Constants for token expiration
-// const DEFAULT_ACCESS_TOKEN_EXPIRES: i64 = 900; // 15 minutes in seconds
-// const DEFAULT_REFRESH_TOKEN_EXPIRES: i64 = 604800; // 7 days in seconds
 // Constants for token expiration
-const ACCESS_TOKEN_EXPIRATION: i64 = 15; // 15 minutes
-const REFRESH_TOKEN_EXPIRATION: i64 = 10080; // 7 days (in minutes)
+pub const ACCESS_TOKEN_EXPIRATION: i64 = 15; // 15 minutes
+pub const REFRESH_TOKEN_EXPIRATION: i64 = 10080; // 7 days (in minutes)
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TokenClaims {
@@ -39,20 +36,15 @@ pub struct AuthService {
     access_secret: String,
     refresh_secret: String,
     pool: Pool<ConnectionManager<PgConnection>>,
-    config: Config,
+
 }
 
 impl AuthService {
-    pub fn config(&self) -> &Config {
-        &self.config
-    }
-
     pub fn new(config: &Config, pool: Pool<ConnectionManager<PgConnection>>) -> Self {
         Self {
             access_secret: config.database.jwt_secret.clone(),
             refresh_secret: config.database.jwt_refresh_secret.clone(),
             pool,
-            config: config.clone(),
         }
     }
 
