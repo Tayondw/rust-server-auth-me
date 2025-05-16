@@ -8,6 +8,14 @@ use crate::{ schema::users::dsl::*, models::User, dto::user_dtos::UserQuery };
 
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 
+/*
+serde::Deserialize cannot be derived for types like Pool<ConnectionManager<PgConnection>>, since they do not implement Deserialize and cannot be deserialized directly from configuration files or JSON.
+
+DatabaseConfig will be split into two parts:
+      - one struct for deserializing raw config values from the environment
+      - another struct that includes the actual pool
+*/
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct RawDatabaseConfig {
     pub database_url: String,
@@ -109,62 +117,3 @@ impl DatabaseConfig {
         result
     }
 }
-
-// impl DatabaseConfig {
-//     pub fn new() -> Result<Self, ConfigError> {
-//         let database_url = env
-//             ::var("DATABASE_URL")
-//             .map_err(|_| ConfigError::Other("DATABASE_URL must be set".to_string()))?;
-
-//         // Create a connection pool
-//         let pool = Pool::builder()
-//             .build(ConnectionManager::<PgConnection>::new(&database_url))
-//             .map_err(|_| ConfigError::Other("Failed to create pool".to_string()))?;
-
-//         Ok(DatabaseConfig {
-//             database_url,
-//             jwt_secret: env
-//                 ::var("JWT_SECRET")
-//                 .map_err(|_| ConfigError::Other("JWT_SECRET must be set".to_string()))?,
-//             jwt_refresh_secret: env
-//                 ::var("JWT_REFRESH_SECRET")
-//                 .map_err(|_| ConfigError::Other("JWT_REFRESH_SECRET must be set".to_string()))?,
-//             rust_log: env
-//                 ::var("RUST_LOG")
-//                 .map_err(|_| ConfigError::Other("RUST_LOG must be set".to_string()))?,
-//             jwt_expires_in: env
-//                 ::var("JWT_EXPIRES_IN")
-//                 .map_err(|_| ConfigError::Other("JWT_EXPIRES_IN must be set".to_string()))?
-//                 .parse()
-//                 .map_err(|_| ConfigError::Other("Invalid JWT_EXPIRES_IN".to_string()))?,
-//             jwt_refresh_expires_in: env
-//                 ::var("JWT_REFRESH_EXPIRES_IN")
-//                 .map_err(|_| ConfigError::Other("JWT_REFRESH_EXPIRES_IN must be set".to_string()))?
-//                 .parse()
-//                 .map_err(|_| ConfigError::Other("Invalid JWT_REFRESH_EXPIRES_IN".to_string()))?,
-//             schema: env
-//                 ::var("SCHEMA")
-//                 .map_err(|_| ConfigError::Other("SCHEMA must be set".to_string()))?,
-//             pool,
-//         })
-//     }
-
-//     pub fn get_user_by_email(
-//         &self,
-//         email_str: &str
-//     ) -> Result<Option<User>, diesel::result::Error> {
-//         let mut conn = self.pool.get().map_err(|e| {
-//             // Optionally convert to a Diesel error or log the error
-//             diesel::result::Error::DatabaseError(
-//                 diesel::result::DatabaseErrorKind::UnableToSendCommand,
-//                 Box::new(e.to_string())
-//             )
-//         })?;
-
-//         use crate::schema::users::dsl::*;
-
-//         let user = users.filter(email.eq(email_str)).first::<User>(&mut conn).optional()?; // returns Ok(Some(User)) or Ok(None)
-
-//         Ok(user)
-//     }
-// }
