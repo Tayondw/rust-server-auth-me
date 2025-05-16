@@ -9,7 +9,7 @@ use axum::{
 };
 use tower_cookies::Cookies;
 
-use crate::utils::token::AuthService;
+use crate::utils::token::{AuthService, decode_token};
 
 pub async fn auth_middleware(
     cookies: Cookies,
@@ -48,8 +48,8 @@ pub async fn auth_middleware(
     };
 
     // Verify token and get user ID
-    let user_id = match auth_service.verify_access_token(&access_token) {
-        Ok(claims) => claims.sub,
+    let user_id = match decode_token(access_token, auth_service.get_access_secret()) {
+        Ok(user_id) => user_id,
         Err(_) => {
             return Response::builder()
                 .status(StatusCode::UNAUTHORIZED)
