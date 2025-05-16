@@ -36,7 +36,6 @@ pub struct AuthService {
     access_secret: String,
     refresh_secret: String,
     pool: Pool<ConnectionManager<PgConnection>>,
-
 }
 
 impl AuthService {
@@ -46,6 +45,14 @@ impl AuthService {
             refresh_secret: config.database.jwt_refresh_secret.clone(),
             pool,
         }
+    }
+
+    pub fn get_access_secret(&self) -> &[u8] {
+        self.access_secret.as_bytes()
+    }
+
+    pub fn get_refresh_secret(&self) -> &[u8] {
+        self.refresh_secret.as_bytes()
     }
 
     pub async fn validate_credentials(
@@ -77,7 +84,7 @@ impl AuthService {
             Err(_) =>
                 Err(
                     ServiceError::HttpError(
-                        HttpError::server_error("Password comparison error".to_string())
+                        HttpError::server_error(ErrorMessage::PasswordComparison.to_string())
                     )
                 ),
         }
@@ -113,7 +120,7 @@ impl AuthService {
         &self,
         user_id: &str
     ) -> Result<String, jsonwebtoken::errors::Error> {
-        self.create_token(user_id, self.access_secret.as_bytes(), ACCESS_TOKEN_EXPIRATION)
+        self.create_token(user_id, self.get_access_secret(), ACCESS_TOKEN_EXPIRATION)
     }
 
     // Generate refresh token (long-lived)
@@ -121,38 +128,7 @@ impl AuthService {
         &self,
         user_id: &str
     ) -> Result<String, jsonwebtoken::errors::Error> {
-        self.create_token(user_id, self.refresh_secret.as_bytes(), REFRESH_TOKEN_EXPIRATION)
-    }
-
-    // Core token verification function
-    fn verify_token(
-        &self,
-        token: &str,
-        secret: &[u8]
-    ) -> Result<TokenClaims, jsonwebtoken::errors::Error> {
-        let validation = Validation::new(Algorithm::HS256);
-        let token_data = decode::<TokenClaims>(
-            token,
-            &DecodingKey::from_secret(secret),
-            &validation
-        )?;
-        Ok(token_data.claims)
-    }
-
-    // Verify access token
-    pub fn verify_access_token(
-        &self,
-        token: &str
-    ) -> Result<TokenClaims, jsonwebtoken::errors::Error> {
-        self.verify_token(token, self.access_secret.as_bytes())
-    }
-
-    // Verify refresh token
-    pub fn verify_refresh_token(
-        &self,
-        token: &str
-    ) -> Result<TokenClaims, jsonwebtoken::errors::Error> {
-        self.verify_token(token, self.refresh_secret.as_bytes())
+        self.create_token(user_id, self.get_refresh_secret(), REFRESH_TOKEN_EXPIRATION)
     }
 
     // Helper function to extract user ID from token with proper error handling
@@ -161,21 +137,12 @@ impl AuthService {
         token: &str,
         is_refresh: bool
     ) -> Result<String, HttpError> {
-        let result = if is_refresh {
-            self.verify_refresh_token(token)
-        } else {
-            self.verify_access_token(token)
-        };
+        let secret = if is_refresh { self.get_refresh_secret() } else { self.get_access_secret() };
 
-        match result {
-            Ok(claims) => Ok(claims.sub),
-            Err(_) =>
-                Err(
-                    HttpError::new(ErrorMessage::InvalidToken.to_string(), StatusCode::UNAUTHORIZED)
-                ),
-        }
+        decode_token(token, secret)
     }
 }
+
 pub fn decode_token<T: Into<String>>(token: T, secret: &[u8]) -> Result<String, HttpError> {
     let decode: Result<
         jsonwebtoken::TokenData<TokenClaims>,
