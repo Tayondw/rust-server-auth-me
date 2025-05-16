@@ -22,7 +22,6 @@ use time::Duration as TimeDuration;
 use tracing::{ info, error };
 use validator::Validate;
 
-
 use crate::{
     models::User,
     AppState,
@@ -190,7 +189,7 @@ pub async fn verify_email_handler(
 }
 
 pub async fn login_handler(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     Extension(auth_service): Extension<Arc<AuthService>>,
     Json(body): Json<LoginRequest>
 ) -> Result<impl IntoResponse, HttpError> {
@@ -258,22 +257,23 @@ pub async fn refresh_token_handler(
         return unauthorized("No refresh token found");
     };
 
-    let claims = match auth_service.verify_refresh_token(&refresh_token) {
-        Ok(claims) => claims,
+    let user_id = match auth_service.extract_user_id_from_token(&refresh_token, true) {
+        Ok(user_id) => user_id,
         Err(_) => {
             remove_auth_cookies(&mut cookies);
             return unauthorized("Invalid refresh token");
         }
     };
 
-    let new_access_token = match auth_service.generate_access_token(&claims.sub) {
+    // Generate new tokens
+    let new_access_token = match auth_service.generate_access_token(&user_id) {
         Ok(token) => token,
         Err(_) => {
             return internal_error("Failed to generate new access token");
         }
     };
 
-    let new_refresh_token = match auth_service.generate_refresh_token(&claims.sub) {
+    let new_refresh_token = match auth_service.generate_refresh_token(&user_id) {
         Ok(token) => token,
         Err(_) => {
             return internal_error("Failed to generate new refresh token");
