@@ -1,24 +1,24 @@
 use diesel::prelude::*;
-use bcrypt::{ hash, DEFAULT_COST };
 use uuid::Uuid;
-use crate::{models::{ NewUser, UpdateUser, User }, schema::users::{self}};
+use crate::{ models::{ NewUser, UpdateUser, User }, schema::users::{ self } };
 
 // CREATE USER
 pub fn create_user(
     conn: &mut PgConnection,
-    email: String,
     name: String,
+    email: String,
     username: String,
-    password: String
+    password: String,
+    verified: bool,
 ) -> Result<User, Box<dyn std::error::Error>> {
-    let token = Some(Uuid::new_v4().to_string());
+    let token: Option<String> = Some(Uuid::new_v4().to_string());
 
     let new_user: NewUser = NewUser {
         name,
         username,
         email,
         password,
-        is_verified: false,
+        verified,
         verification_token: token,
     };
 
@@ -30,16 +30,12 @@ pub fn create_user(
 // UPDATE USER
 pub fn update_user(
     conn: &mut PgConnection,
-    user_id: i32,
+    user_id: Uuid,
     email: Option<String>,
     name: Option<String>,
     username: Option<String>,
     password: Option<String>
 ) -> Result<User, Box<dyn std::error::Error>> {
-    let password: Option<String> = password
-        .map(|pwd: String| hash(pwd.as_bytes(), DEFAULT_COST))
-        .transpose()?;
-
     let update_user: UpdateUser = UpdateUser {
         email,
         name,
@@ -59,7 +55,7 @@ pub fn update_user(
 // DELETE USER
 pub async fn delete_user(
     conn: &mut PgConnection,
-    user_id: i32
+    user_id: Uuid
 ) -> Result<(), diesel::result::Error> {
     use crate::schema::users::dsl::*;
 
