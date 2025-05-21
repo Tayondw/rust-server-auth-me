@@ -18,12 +18,9 @@ use axum::{ extract::Extension, middleware::from_fn, routing::get, Router };
 use diesel::{ prelude::*, r2d2::{ ConnectionManager, Pool } };
 use config::Config;
 use dotenvy::dotenv;
-use routes::{
-    api::{ users_router::user_routes, posts::post_routes },
-    general_router::general_routes,
-};
+use routes::{ api::users_router::user_routes, general_router::general_routes };
 use auth::router::authentication_routes;
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::{ cors::CorsLayer, trace::TraceLayer };
 use middleware::{
     csrf::{ csrf_middleware, TokenStore, get_csrf_token },
     cors::create_cors_layer,
@@ -52,7 +49,9 @@ async fn main() -> Result<(), HttpError> {
     })?;
 
     // Set up database connection pool
-    let manager: ConnectionManager<PgConnection> = ConnectionManager::<PgConnection>::new(&config.database.database_url);
+    let manager: ConnectionManager<PgConnection> = ConnectionManager::<PgConnection>::new(
+        &config.database.database_url
+    );
     let pool: Pool<ConnectionManager<PgConnection>> = Pool::builder()
         .build(manager)
         .map_err(|e| HttpError::server_error(format!("Failed to create pool: {}", e)))?;
@@ -73,7 +72,6 @@ async fn main() -> Result<(), HttpError> {
 
     let app = Router::new()
         .merge(user_routes(shared_state.clone()))
-        .merge(post_routes())
         .merge(general_routes())
         .nest("/api/auth", authentication_routes(shared_state.clone()))
         .route("/csrf-token", get(get_csrf_token))
@@ -89,9 +87,9 @@ async fn main() -> Result<(), HttpError> {
     let addr: SocketAddr = SocketAddr::from(([127, 0, 0, 1], 8080));
     println!("Server running on http://{}", addr);
 
-    let listener: TcpListener = TcpListener
-        ::bind(addr).await
-        .map_err(|e| HttpError::server_error(format!("Failed to bind address: {}", e)))?;
+    let listener: TcpListener = TcpListener::bind(addr).await.map_err(|e|
+        HttpError::server_error(format!("Failed to bind address: {}", e))
+    )?;
 
     axum
         ::serve(listener, app.into_make_service()).await
