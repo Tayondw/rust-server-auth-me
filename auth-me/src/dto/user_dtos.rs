@@ -1,9 +1,10 @@
-use chrono::{ DateTime, TimeZone, Utc };
+use chrono::{ DateTime, Utc };
 use serde::{ Deserialize, Serialize };
 use core::str;
 use regex::Regex;
 use validator::{ Validate, ValidationError };
 use lazy_static::lazy_static;
+use uuid::Uuid;
 
 use crate::models::User;
 
@@ -15,6 +16,9 @@ pub struct CreateUserRequest {
     )]
     pub name: String,
 
+    #[validate(length(min = 1, message = "Email is required"), email(message = "Email is invalid"))]
+    pub email: String,
+
     #[validate(
         length(min = 1, message = "Username is required"),
         length(max = 25, message = "Username cannot be longer than 25 characters"),
@@ -24,9 +28,6 @@ pub struct CreateUserRequest {
         )
     )]
     pub username: String,
-
-    #[validate(length(min = 1, message = "Email is required"), email(message = "Email is invalid"))]
-    pub email: String,
 
     #[validate(
         length(min = 8, max = 25, message = "Password must be between 8 and 25 characters"),
@@ -40,6 +41,8 @@ pub struct CreateUserRequest {
     )]
     #[serde(rename = "passwordConfirm")]
     pub password_confirm: String,
+
+    pub verified: bool,
 
     #[validate(custom = "validate_terms_acceptance")]
     pub terms_accepted: bool,
@@ -72,7 +75,7 @@ fn validate_terms_acceptance(terms: &bool) -> Result<(), ValidationError> {
 
 #[derive(Debug)]
 pub enum UserQuery<'a> {
-    Id(i32),
+    Id(Uuid),
     Email(&'a str),
     Name(&'a str),
     Username(&'a str),
@@ -92,13 +95,13 @@ pub struct RequestQuery {
 pub struct FilterUser {
     pub id: String,
     pub name: String,
-    pub username: String,
     pub email: String,
+    pub username: String,
+    pub verified: bool,
     #[serde(rename = "createdAt")]
     pub created_at: DateTime<Utc>,
     #[serde(rename = "updatedAt")]
     pub updated_at: DateTime<Utc>,
-    pub is_verified: bool,
 }
 
 impl FilterUser {
@@ -106,11 +109,11 @@ impl FilterUser {
         FilterUser {
             id: user.id.to_string(),
             name: user.name.to_owned(),
-            username: user.username.to_owned(),
             email: user.email.to_owned(),
-            created_at: Utc.from_utc_datetime(&user.created_at),
-            updated_at: user.updated_at,
-            is_verified: user.is_verified,
+            username: user.username.to_owned(),
+            verified: user.verified,
+            created_at: user.created_at.unwrap(),
+            updated_at: user.updated_at.unwrap(),
         }
     }
 
