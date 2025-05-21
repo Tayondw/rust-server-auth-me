@@ -8,7 +8,7 @@ pub mod sql_types {
 
 diesel::table! {
     use diesel::sql_types::*;
-    use super::sql_types::UserRole;
+    use crate::models::UserRoleType;
 
     users (id) {
         id -> Uuid,
@@ -24,7 +24,7 @@ diesel::table! {
         #[max_length = 255]
         verification_token -> Nullable<Varchar>,
         token_expires_at -> Nullable<Timestamptz>,
-        role -> UserRole,
+        role -> UserRoleType,
         created_at -> Nullable<Timestamptz>,
         updated_at -> Nullable<Timestamptz>,
     }
