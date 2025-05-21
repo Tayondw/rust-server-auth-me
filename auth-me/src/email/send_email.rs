@@ -7,7 +7,7 @@ use lettre::{
     Transport,
 };
 
-use crate::errors::{HttpError, ErrorMessage};
+use crate::errors::{ HttpError, ErrorMessage };
 
 pub async fn send_email(
     to_email: &str,
@@ -18,6 +18,9 @@ pub async fn send_email(
     let smtp_username = env
         ::var("SMTP_USERNAME")
         .map_err(|_| HttpError::server_error("Missing SMTP_USERNAME env variable"))?;
+    let smtp_from_address = env
+        ::var("SMTP_FROM_ADDRESS")
+        .map_err(|_| HttpError::server_error("Missing SMTP_FROM_ADDRESS env variable"))?;
     let smtp_password = env
         ::var("SMTP_PASSWORD")
         .map_err(|_| HttpError::server_error("Missing SMTP_PASSWORD env variable"))?;
@@ -40,9 +43,19 @@ pub async fn send_email(
 
     let email = Message::builder()
         .from(
-            smtp_username.parse().map_err(|_| HttpError::bad_request(ErrorMessage::InvalidFromEmailFormat.to_string()))?
+            smtp_from_address
+                .parse()
+                .map_err(|_|
+                    HttpError::bad_request(ErrorMessage::InvalidFromEmailFormat.to_string())
+                )?
         )
-        .to(to_email.parse().map_err(|_| HttpError::bad_request(ErrorMessage::InvalidRecipientEmailFormat.to_string()))?)
+        .to(
+            to_email
+                .parse()
+                .map_err(|_|
+                    HttpError::bad_request(ErrorMessage::InvalidRecipientEmailFormat.to_string())
+                )?
+        )
         .subject(subject)
         .header(header::ContentType::TEXT_HTML)
         .singlepart(
