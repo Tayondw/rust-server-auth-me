@@ -6,6 +6,7 @@ use diesel::{
     PgConnection,
     result::Error,
 };
+use uuid::Uuid;
 use crate::{
     models::User,
     schema::users::{ self },
@@ -34,7 +35,7 @@ pub async fn get_users(State(state): State<Arc<AppState>>) -> Result<Json<Vec<Us
 // GET USER BY ID
 pub async fn get_user_by_id(
     State(state): State<Arc<AppState>>,
-    Path(user_id): Path<i32>
+    Path(user_id): Path<Uuid>
 ) -> Result<Json<User>, HttpError> {
     let mut conn: PooledConnection<ConnectionManager<PgConnection>> = state.conn()?;
 
@@ -65,7 +66,7 @@ pub async fn create_user_handler(
 ) -> Result<Json<User>, HttpError> {
     let mut conn: PooledConnection<ConnectionManager<PgConnection>> = state.conn()?;
 
-    create_user(&mut conn, user_data.email, user_data.name, user_data.username, user_data.password)
+    create_user(&mut conn, user_data.email, user_data.name, user_data.username, user_data.password, user_data.verified)
         .map(Json)
         .map_err(|e| {
             if e.to_string().contains("UNIQUE constraint failed") {
@@ -79,7 +80,7 @@ pub async fn create_user_handler(
 // UPDATE USER BY ID
 pub async fn update_user_handler(
     State(state): State<Arc<AppState>>,
-    Path(user_id): Path<i32>,
+    Path(user_id): Path<Uuid>,
     Json(update_data): Json<UpdateUserRequest>
 ) -> Result<Json<User>, HttpError> {
     let mut conn: PooledConnection<ConnectionManager<PgConnection>> = state.conn()?;
@@ -99,7 +100,7 @@ pub async fn update_user_handler(
 // DELETE USER BY ID
 pub async fn delete_user_handler(
     State(state): State<Arc<AppState>>,
-    Path(user_id): Path<i32>
+    Path(user_id): Path<Uuid>
 ) -> Result<StatusCode, HttpError> {
     let mut conn: PooledConnection<ConnectionManager<PgConnection>> = state.conn()?;
 

@@ -64,7 +64,8 @@ pub async fn signup_handler(
             signup_data.email.clone(),
             signup_data.name.clone(),
             signup_data.username.clone(),
-            hashed_password // Use the argon2 hashed password instead of raw password
+            hashed_password, // Use the argon2 hashed password instead of raw password
+            signup_data.verified.clone()
         ).map_err(|e| {
             tracing::error!("Error creating user: {}", e);
             DieselError::RollbackTransaction
@@ -139,7 +140,7 @@ pub async fn verify_email_handler(
     let updated_user = diesel
         ::update(users.filter(id.eq(user.id)))
         .set((
-            is_verified.eq(true),
+            verified.eq(true),
             verification_token.eq::<Option<String>>(None),
             updated_at.eq(Utc::now().naive_utc()),
         ))
