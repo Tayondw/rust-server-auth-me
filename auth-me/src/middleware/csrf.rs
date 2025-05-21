@@ -1,11 +1,10 @@
 use axum::{
     middleware::Next,
-    response::{ Response, IntoResponse, Html, Json },
+    response::{ Response, IntoResponse, Json },
     http::{ Request, StatusCode, HeaderValue, Method },
     body::Body,
     extract::Extension,
 };
-use serde_json::json;
 use ring::rand::{ SystemRandom, SecureRandom };
 use base64::{ Engine as _, engine::general_purpose::URL_SAFE };
 use time::{ Duration, OffsetDateTime };
@@ -47,7 +46,6 @@ impl TokenData {
 }
 
 #[derive(Clone)]
-// Our token storage
 pub struct TokenStore {
     tokens: Arc<RwLock<HashMap<String, TokenData>>>,
 }
@@ -85,15 +83,6 @@ impl TokenStore {
             .get(token)
             .map(|data: &TokenData| data.is_valid())
             .unwrap_or(false)
-    }
-
-    // Added cleanup method
-    pub async fn cleanup_expired(&self) {
-        let mut tokens: tokio::sync::RwLockWriteGuard<
-            '_,
-            HashMap<String, TokenData>
-        > = self.tokens.write().await;
-        tokens.retain(|_, data: &mut TokenData| data.is_valid());
     }
 }
 
@@ -133,94 +122,6 @@ pub async fn csrf_middleware(
     }
 
     Ok(response)
-}
-
-// Test endpoints
-pub async fn test_csrf_get() -> impl IntoResponse {
-    let html: Html<&str> = Html(
-        r#"
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>CSRF Test</title>
-            <meta name="csrf-token" id="csrf-token" content="">
-        </head>
-        <body>
-            <div id="result"></div>
-            <button id="showToken">Show CSRF Token</button>
-            <button id="testPost">Test POST with CSRF</button>
-
-            <script>
-                // Function to update the CSRF token
-                function updateCSRFToken(token) {
-                    document.getElementById('csrf-token').content = token;
-                }
-
-                // Get initial CSRF token from headers
-                updateCSRFToken(document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'));
-
-                document.getElementById('showToken').addEventListener('click', async () => {
-                    const response = await fetch('/test-csrf-debug');
-                    const data = await response.json();
-                    // Update token from response header
-                    const newToken = response.headers.get('X-CSRF-Token');
-                    if (newToken) {
-                        updateCSRFToken(newToken);
-                    }
-                    document.getElementById('result').textContent =
-                        JSON.stringify(data, null, 2);
-                });
-
-                document.getElementById('testPost').addEventListener('click', async () => {
-                    const token = document.getElementById('csrf-token').content;
-                    try {
-                        const response = await fetch('/test-csrf-post', {
-                            method: 'POST',
-                            headers: {
-                                'X-CSRF-Token': token,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ test: 'data' })
-                        });
-                        const result = await response.json();
-                        // Update token from response header
-                        const newToken = response.headers.get('X-CSRF-Token');
-                        if (newToken) {
-                            updateCSRFToken(newToken);
-                        }
-                        document.getElementById('result').textContent =
-                            JSON.stringify(result, null, 2);
-                    } catch (err) {
-                        document.getElementById('result').textContent =
-                            'Error: ' + err.message;
-                    }
-                });
-            </script>
-        </body>
-        </html>
-    "#
-    );
-
-    html
-}
-
-pub async fn test_csrf_post() -> impl IntoResponse {
-    Json(json!({ "message": "POST successful" }))
-}
-
-pub async fn debug_csrf(request: Request<Body>) -> impl IntoResponse {
-    let headers: &axum::http::HeaderMap = request.headers();
-    let csrf_header: &str = headers
-        .get("X-CSRF-Token")
-        .and_then(|v: &HeaderValue| v.to_str().ok())
-        .unwrap_or("No CSRF header");
-
-    Json(
-        json!({
-        "csrf_header": csrf_header,
-        "method": request.method().as_str(),
-    })
-    )
 }
 
 pub async fn get_csrf_token(Extension(
