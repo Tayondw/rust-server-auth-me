@@ -33,13 +33,8 @@ pub enum ErrorMessage {
     InvalidRecipientEmailFormat,
     ExceededMaxPasswordLength(usize),
     DeleteUserError,
-    PostsByUserError,
-    PostCreationError,
     UserCreationError,
-    PostUpdateError,
     UserUpdateError,
-    PostNotFound,
-    DeletePostError,
     NotFound,
     EmailVerificationError,
     PasswordComparison
@@ -55,7 +50,6 @@ impl ErrorMessage {
     fn to_str(&self) -> String {
         match self {
             ErrorMessage::DatabaseError => "Error connecting to the database".to_string(),
-            ErrorMessage::DeletePostError => "Unable to delete the post".to_string(),
             ErrorMessage::DeleteUserError => "Unable to delete the user".to_string(),
             ErrorMessage::EmailVerificationError => "Failed to send verification email".to_string(),
             ErrorMessage::EmptyPassword => "Password cannot be empty".to_string(),
@@ -73,10 +67,6 @@ impl ErrorMessage {
                 "You are not allowed to perform this action".to_string(),
             ErrorMessage::PasswordComparison =>
                 "Password comparison error".to_string(),
-            ErrorMessage::PostCreationError => "Unable to create post.".to_string(),
-            ErrorMessage::PostNotFound => "Post belonging to this id does not exist".to_string(),
-            ErrorMessage::PostUpdateError => "Unable to update post".to_string(),
-            ErrorMessage::PostsByUserError => "Error fetching posts for this user".to_string(),
             ErrorMessage::TokenNotProvided =>
                 "You are not logged in, please provide a token".to_string(),
             ErrorMessage::UserCreationError => "Unable to create user.".to_string(),
