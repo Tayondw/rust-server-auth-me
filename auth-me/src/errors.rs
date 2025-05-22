@@ -37,6 +37,7 @@ pub enum ErrorMessage {
     UserUpdateError,
     NotFound,
     EmailVerificationError,
+    EmailNotFound,
     PasswordComparison
 }
 
@@ -51,6 +52,7 @@ impl ErrorMessage {
         match self {
             ErrorMessage::DatabaseError => "Error connecting to the database".to_string(),
             ErrorMessage::DeleteUserError => "Unable to delete the user".to_string(),
+            ErrorMessage::EmailNotFound => "Email not found".to_string(),
             ErrorMessage::EmailVerificationError => "Failed to send verification email".to_string(),
             ErrorMessage::EmptyPassword => "Password cannot be empty".to_string(),
             ErrorMessage::ExceededMaxPasswordLength(max_length) =>
