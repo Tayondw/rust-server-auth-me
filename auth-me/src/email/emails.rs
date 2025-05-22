@@ -1,6 +1,15 @@
 use super::send_email::send_email;
 use crate::errors::{HttpError, ErrorMessage};
 
+
+/// Sends a verification email to a user who has attempted to sign up
+///
+/// # Arguments
+/// * `to_email` - The email address of the recipient
+/// * `username` - The username of the recipient
+///
+/// # Returns
+/// * `Result<(), HttpError>` - Success or an error
 pub async fn send_verification_email(
     to_email: &str,
     username: &str,
@@ -30,6 +39,14 @@ fn create_verification_link(base_url: &str, token: &str) -> String {
     format!("{}?token={}", base_url, token)
 }
 
+/// Sends a welcome email to a user who has verified their account when clicking on the link in the email
+///
+/// # Arguments
+/// * `to_email` - The email address of the recipient
+/// * `username` - The username of the recipient
+///
+/// # Returns
+/// * `Result<(), HttpError>` - Success or an error
 pub async fn send_welcome_email(
     to_email: &str,
     username: &str
@@ -41,26 +58,26 @@ pub async fn send_welcome_email(
     send_email(to_email, subject, template_path, &placeholders).await
 }
 
-// /// Sends a password reset email to a user who has forgotten their password
-// ///
-// /// # Arguments
-// /// * `to_email` - The email address of the recipient
-// /// * `rest_link` - The link for resetting the password
-// /// * `username` - The username of the recipient
-// ///
-// /// # Returns
-// /// * `Result<(), Box<dyn std::error::Error>>` - Success or an error
-// pub async fn send_forgot_password_email(
-//     to_email: &str,
-//     rest_link: &str,
-//     username: &str
-// ) -> Result<(), Box<dyn std::error::Error>> {
-//     let subject = "Reset your Password";
-//     let template_path = "src/mail/templates/RestPassword-email.html";
-//     let placeholders = vec![
-//         ("{{username}}".to_string(), username.to_string()),
-//         ("{{rest_link}}".to_string(), rest_link.to_string())
-//     ];
+/// Sends a password reset email to a user who has forgotten their password
+///
+/// # Arguments
+/// * `to_email` - The email address of the recipient
+/// * `rest_link` - The link for resetting the password
+/// * `username` - The username of the recipient
+///
+/// # Returns
+/// * `Result<(), HttpError>` - Success or an error
+pub async fn send_forgot_password_email(
+    to_email: &str,
+    rest_link: &str,
+    username: &str
+) -> Result<(), HttpError> {
+    let subject = "Reset your Password";
+    let template_path = "src/mail/templates/RestPassword-email.html";
+    let placeholders = vec![
+        ("{{username}}".to_string(), username.to_string()),
+        ("{{rest_link}}".to_string(), rest_link.to_string())
+    ];
 
-//     send_email(to_email, subject, template_path, &placeholders).await
-// }
+    send_email(to_email, subject, template_path, &placeholders).await
+}
