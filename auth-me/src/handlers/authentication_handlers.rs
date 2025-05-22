@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{
     extract::{ Query, State },
-    response::IntoResponse,
+    response::{ IntoResponse, Redirect },
     Json,
     http::{ StatusCode, header, HeaderMap },
     Extension,
@@ -14,25 +14,36 @@ use tower_cookies::Cookies;
 use cookie::Cookie;
 
 use serde_json::json;
-use serde::{ Deserialize, Serialize };
 
-use chrono::Utc;
+use chrono::{ Utc, Duration };
 use time::Duration as TimeDuration;
 
 use tracing::{ info, error };
 use validator::Validate;
 
 use crate::{
-    models::User,
-    AppState,
-    database::DbConnExt,
     auth::middleware::AuthUser,
-    utils::{ password::hash, token::* },
+    database::DbConnExt,
+    dto::{
+        authentication_dtos::{
+            ForgotPasswordRequest,
+            ForgotPasswordResponse,
+            LoginRequest,
+            ResetPasswordRequest,
+            ResetPasswordResponse,
+            SignupRequest,
+            UserLoginResponse,
+            VerifyEmailQuery,
+        },
+        user_dtos::UserQuery,
+    },
+    email::emails::{ send_verification_email, send_welcome_email, send_forgot_password_email },
+    errors::{ ErrorMessage, HttpError },
     middleware::cookies::{ get_refresh_token, remove_auth_cookies },
-    dto::authentication_dtos::{ LoginRequest, SignupRequest, UserLoginResponse },
+    models::User,
     operations::user_operations::create_user,
-    email::emails::{ send_verification_email, send_welcome_email },
-    errors::{ HttpError, ErrorMessage },
+    utils::{ password::hash, token::* },
+    AppState,
 };
 
 pub async fn signup_handler(
@@ -112,12 +123,6 @@ pub async fn signup_handler(
     }
 }
 
-#[derive(Serialize, Deserialize, Validate)]
-pub struct VerifyEmailQuery {
-    #[validate(length(min = 1, message = "Token is required."))]
-    pub token: String,
-}
-
 pub async fn verify_email_handler(
     State(state): State<Arc<AppState>>,
     Query(query): Query<VerifyEmailQuery>
@@ -175,7 +180,7 @@ pub async fn verify_email_handler(
             .map_err(|_| HttpError::server_error("Failed to parse cookie".to_string()))?
     );
 
-    // 7. Return success with cookie header
+    // Step 7: Return success with cookie header
     let response = (
         headers,
         Json(
@@ -359,4 +364,84 @@ pub async fn protected_handler(Extension(user): Extension<AuthUser>) -> impl Int
     })
         ),
     )
+}
+
+pub async fn forgot_password(
+    Extension(state): Extension<Arc<AppState>>,
+    Json(body): Json<ForgotPasswordRequest>
+) -> Result<impl IntoResponse, HttpError> {
+    body.validate().map_err(|e| HttpError::bad_request(e.to_string()))?;
+
+    let result = state.config.database
+        .get_user(UserQuery::Email(&body.email))
+        .map_err(|e| HttpError::server_error(e.to_string()))?;
+
+    let user = result.ok_or(HttpError::bad_request(ErrorMessage::EmailNotFound.to_string()))?;
+
+    let verification_token = uuid::Uuid::new_v4().to_string();
+    let expires_at = (Utc::now() + Duration::minutes(30)).naive_utc();
+
+    let user_id = uuid::Uuid::parse_str(&user.id.to_string()).unwrap();
+
+    state.config.database
+        .add_verified_token(user_id, verification_token.clone(), expires_at)
+        .map_err(|e| HttpError::server_error(e.to_string()))?;
+
+    let reset_link = format!("http://localhost:5173/reset-password?token={}", &verification_token);
+
+    let email_sent = send_forgot_password_email(&user.email, &reset_link, &user.name).await;
+
+    if let Err(e) = email_sent {
+        eprintln!("Failed to send forgot password email: {}", e);
+        return Err(HttpError::server_error("Failed to send email".to_string()));
+    }
+
+    let response = ForgotPasswordResponse {
+        message: "Password reset link has been sent to your email.".to_string(),
+        status: "success".to_string(),
+    };
+
+    Ok(Json(response))
+}
+
+pub async fn reset_password(
+    Extension(state): Extension<Arc<AppState>>,
+    Json(body): Json<ResetPasswordRequest>
+) -> Result<impl IntoResponse, HttpError> {
+    body.validate().map_err(|e| HttpError::bad_request(e.to_string()))?;
+
+    let result = state.config.database
+        .get_user(UserQuery::Token(&body.token))
+        .map_err(|e| HttpError::server_error(e.to_string()))?;
+
+    let user = result.ok_or(HttpError::bad_request("Invalid or expired token".to_string()))?;
+
+    if let Some(expires_at) = user.token_expires_at {
+        if Utc::now() > expires_at {
+            return Err(HttpError::bad_request("Verification token has expired".to_string()))?;
+        }
+    } else {
+        return Err(HttpError::bad_request("Invalid verification token".to_string()))?;
+    }
+
+    let user_id = uuid::Uuid::parse_str(&user.id.to_string()).unwrap();
+
+    let hash_password = hash(&body.new_password).map_err(|e|
+        HttpError::server_error(e.to_string())
+    )?;
+
+    state.config.database
+        .update_user_password(user_id.clone(), hash_password).await
+        .map_err(|e| HttpError::server_error(e.to_string()))?;
+
+    state.config.database
+        .verified_token(&body.token).await
+        .map_err(|e| HttpError::server_error(e.to_string()))?;
+
+    let response = ResetPasswordResponse {
+        message: "Password has been successfully reset.".to_string(),
+        status: "success".to_string(),
+    };
+
+    Ok(Json(response))
 }
