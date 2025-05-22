@@ -31,7 +31,44 @@ pub struct UserLoginResponse {
 }
 
 #[derive(Serialize, Deserialize, Validate)]
-pub struct VerifyEmailQueryDto {
+pub struct VerifyEmailQuery {
     #[validate(length(min = 1, message = "Token is required."))]
     pub token: String,
+}
+
+#[derive(Deserialize, Serialize, Validate, Debug, Clone)]
+pub struct ForgotPasswordRequest {
+    #[validate(length(min = 1, message = "Email is required"), email(message = "Email is invalid"))]
+    pub email: String,
+}
+
+#[derive(Serialize)]
+pub struct ForgotPasswordResponse {
+    pub message: String,
+    pub status: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate, Clone)]
+pub struct ResetPasswordRequest {
+    #[validate(length(min = 1, message = "Token is required."))]
+    pub token: String,
+
+    #[validate(
+        length(min = 1, message = "New password is required."),
+        length(min = 6, message = "new password must be at least 6 characters")
+    )]
+    pub new_password: String,
+
+    #[validate(
+        length(min = 1, message = "New password confirm is required."),
+        length(min = 6, message = "new password confirm must be at least 6 characters"),
+        must_match(other = "new_password", message = "new passwords do not match")
+    )]
+    pub new_password_confirm: String,
+}
+
+#[derive(Serialize)]
+pub struct ResetPasswordResponse {
+    pub message: String,
+    pub status: String,
 }
