@@ -1,107 +1,133 @@
-/*
------------------------------------------------------ PURPOSE ------------------------------------------------------------------
-Provide two middleware functions that work together to secure API endpoints by verifying user identity and checking permissions.
-*/
-
 use std::sync::Arc;
 
 use axum::{
     extract::Request,
-    http::{ header, StatusCode },
+    response::Response,
     middleware::Next,
-    response::IntoResponse,
+    http::{ StatusCode, header },
     Extension,
 };
-
-use axum_extra::extract::cookie::CookieJar;
-use serde::{ Deserialize, Serialize };
+use axum_extra::extract::CookieJar;
 
 use crate::{
-    dto::user_dtos::UserQuery,
-    errors::{ ErrorMessage, HttpError },
     models::{ User, UserRole },
-    utils::token,
-    AppState,
+    utils::token::{ AuthService, decode_token },
+    config::{ DatabaseConfig, ConfigError },
 };
 
-// Container that holds authenticated user information, which gets attached to requests after successful authentication.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct JWTAuthMiddeware {
-    pub user: User,
+/// Struct to hold user ID
+#[derive(Debug, Clone)]
+pub struct AuthUser {
+    pub user_id: String,
 }
 
-pub async fn auth(
-    cookie_jar: CookieJar,
-    Extension(state): Extension<Arc<AppState>>,
-    mut req: Request,
+/// Struct that holds authenticated user information, which gets attached to requests after role check
+#[derive(Debug, Clone)]
+pub struct AuthenticatedUser {
+    pub user: User, // -> user struct from model
+}
+
+/*
+----------------------------------------------------- PURPOSE ------------------------------------------------------------------
+Provide middleware functions that work together to secure API endpoints by verifying user identity and checking permissions.
+*/
+
+pub async fn auth_middleware(
+    Extension(auth_service): Extension<Arc<AuthService>>,
+    mut request: Request,
     next: Next
-) -> Result<impl IntoResponse, HttpError> {
-    let cookies = cookie_jar
-        .get("token")
-        .map(|cookie| cookie.value().to_string())
-        .or_else(|| {
-            req.headers()
-                .get(header::AUTHORIZATION)
-                .and_then(|auth_header| auth_header.to_str().ok())
-                .and_then(|auth_value| {
-                    if auth_value.starts_with("Bearer ") {
-                        Some(auth_value[7..].to_owned())
-                    } else {
-                        None
-                    }
-                })
-        });
+) -> Result<Response, StatusCode> {
+    // Extract token from cookies or Authorization header
+    let token: String = extract_token(&request)?;
 
-    let token = cookies.ok_or_else(|| {
-        HttpError::unauthorized(ErrorMessage::TokenNotProvided.to_string())
-    })?;
+    // Decode token to get user ID using your existing function
+    let user_id: String = decode_token(token, auth_service.get_access_secret()).map_err(
+        |_| StatusCode::UNAUTHORIZED
+    )?;
 
-    let token_details = match
-        token::decode_token(token, state.config.database.jwt_secret.as_bytes())
-    {
-        Ok(token_details) => token_details,
-        Err(_) => {
-            return Err(HttpError::unauthorized(ErrorMessage::InvalidToken.to_string()));
-        }
-    };
+    // Add the user ID to request extensions
+    request.extensions_mut().insert(AuthUser { user_id });
 
-    let user_id = uuid::Uuid
-        ::parse_str(&token_details.to_string())
-        .map_err(|_| { HttpError::unauthorized(ErrorMessage::InvalidToken.to_string()) })?;
-
-    let user = state.config.database
-        .get_user(UserQuery::Id(user_id))
-        .map_err(|_| { HttpError::unauthorized(ErrorMessage::UserNoLongerExists.to_string()) })?;
-
-    let user = user.ok_or_else(|| {
-        HttpError::unauthorized(ErrorMessage::UserNoLongerExists.to_string())
-    })?;
-
-    req.extensions_mut().insert(JWTAuthMiddeware {
-        user: user.clone(),
-    });
-
-    Ok(next.run(req).await)
+    // Continue with the request
+    Ok(next.run(request).await)
 }
 
-pub async fn role_check(
-    Extension(_state): Extension<Arc<AppState>>,
-    req: Request,
+pub async fn role_check_middleware(
+    Extension(_auth_service): Extension<Arc<AuthService>>,
+    Extension(database_config): Extension<Arc<DatabaseConfig>>,
+    mut request: Request,
     next: Next,
     required_roles: Vec<UserRole>
-) -> Result<impl IntoResponse, HttpError> {
-    let user = req
+) -> Result<Response, StatusCode> {
+    // Get the authenticated user id from the previous middleware
+    let auth_user: &AuthUser = request
         .extensions()
-        .get::<JWTAuthMiddeware>()
-        .ok_or_else(|| {
-            HttpError::unauthorized(ErrorMessage::UserNotAuthenticated.to_string())
-        })?;
+        .get::<AuthUser>()
+        .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    if !required_roles.contains(&user.user.role) {
-        return Err(
-            HttpError::new(ErrorMessage::PermissionDenied.to_string(), StatusCode::FORBIDDEN)
-        );
+    // Fetch the full user from database using your DatabaseConfig
+    let user: User = get_user_from_db(&database_config, &auth_user.user_id).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::UNAUTHORIZED)?; // User no longer exists
+
+    // Check if user has required role
+    if !required_roles.contains(&user.role) {
+        return Err(StatusCode::FORBIDDEN);
     }
 
-    Ok(next.run(req).await)
+    // Add full user info to extensions for handlers that need it
+    request.extensions_mut().insert(AuthenticatedUser { user });
+
+    Ok(next.run(request).await)
+}
+
+// Helper function to get user from database
+async fn get_user_from_db(
+    database_config: &DatabaseConfig,
+    user_id: &str
+) -> Result<Option<User>, ConfigError> {
+    use crate::dto::user_dtos::UserQuery;
+
+    // Parse user_id as UUID
+    let user_uuid = uuid::Uuid
+        ::parse_str(user_id)
+        .map_err(|_| ConfigError::Config("Invalid user ID format".to_string()))?;
+
+    database_config.get_user(UserQuery::Id(user_uuid))
+}
+
+fn extract_token(request: &Request) -> Result<String, StatusCode> {
+    // Try cookies first
+    let cookie_jar: CookieJar = CookieJar::from_headers(request.headers());
+    if let Some(cookie) = cookie_jar.get("access_token") {
+        return Ok(cookie.value().to_string());
+    }
+
+    // Fallback to Authorization header
+    request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|auth_header: &header::HeaderValue| auth_header.to_str().ok())
+        .and_then(|auth_value: &str| {
+            if auth_value.starts_with("Bearer ") { Some(auth_value[7..].to_owned()) } else { None }
+        })
+        .ok_or(StatusCode::UNAUTHORIZED)
+}
+
+/// Create role-specific middleware
+pub fn require_roles(
+    roles: Vec<UserRole>
+) -> impl (Fn(
+    Extension<Arc<AuthService>>,
+    Extension<Arc<DatabaseConfig>>,
+    Request,
+    Next
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Response, StatusCode>> + Send>>) +
+    Clone {
+    move |auth_service, database_config, request, next| {
+        let roles = roles.clone();
+        Box::pin(async move {
+            role_check_middleware(auth_service, database_config, request, next, roles).await
+        })
+    }
 }
