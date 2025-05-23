@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{
     extract::{ Query, State },
-    response::{ IntoResponse, Redirect },
+    response::IntoResponse,
     Json,
     http::{ StatusCode, header, HeaderMap },
     Extension,
@@ -22,19 +22,18 @@ use tracing::{ info, error };
 use validator::Validate;
 
 use crate::{
-    auth::middleware::AuthUser,
+    middleware::auth::{AuthUser, AuthenticatedUser},
     database::DbConnExt,
     dto::{
         authentication_dtos::{
             ForgotPasswordRequest,
-            ForgotPasswordResponse,
             LoginRequest,
             ResetPasswordRequest,
-            ResetPasswordResponse,
             SignupRequest,
             UserLoginResponse,
             VerifyEmailQuery,
         },
+        Response,
         user_dtos::UserQuery,
     },
     email::emails::{ send_verification_email, send_welcome_email, send_forgot_password_email },
@@ -192,6 +191,56 @@ pub async fn verify_email_handler(
     );
 
     Ok(response)
+}
+
+// Handler that only needs user ID
+pub async fn get_profile(
+    Extension(auth_user): Extension<AuthUser>,
+    Extension(database_config): Extension<Arc<crate::config::DatabaseConfig>>
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    // You can fetch additional user data here if needed
+    let user_uuid = uuid::Uuid::parse_str(&auth_user.user_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    let user = database_config
+        .get_user(crate::dto::user_dtos::UserQuery::Id(user_uuid))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    Ok(
+        Json(
+            json!({
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "role": user.role.to_str(),
+        "verified": user.verified
+    })
+        )
+    )
+}
+
+// Handler for admin-only routes (has full user info already)
+pub async fn list_all_users(
+    Extension(authenticated_user): Extension<AuthenticatedUser>,
+    Extension(database_config): Extension<Arc<crate::config::DatabaseConfig>>
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    // This user is guaranteed to be an Admin because of the middleware
+    println!("Admin {} is listing all users", authenticated_user.user.email);
+
+    // You could add more database queries here to get all users
+    // For now, just return the admin's info as proof of concept
+    Ok(
+        Json(
+            json!({
+        "message": "Admin access granted",
+        "admin": {
+            "name": authenticated_user.user.name,
+            "email": authenticated_user.user.email,
+            "role": authenticated_user.user.role.to_str()
+        }
+    })
+        )
+    )
 }
 
 pub async fn login_handler(
@@ -376,7 +425,7 @@ pub async fn forgot_password(
         .get_user(UserQuery::Email(&body.email))
         .map_err(|e| HttpError::server_error(e.to_string()))?;
 
-    let user = result.ok_or(HttpError::bad_request(ErrorMessage::EmailNotFound.to_string()))?;
+    let user = result.ok_or(HttpError::bad_request(ErrorMessage::EmailNotFoundError.to_string()))?;
 
     let verification_token = uuid::Uuid::new_v4().to_string();
     let expires_at = (Utc::now() + Duration::minutes(30)).naive_utc();
@@ -393,10 +442,10 @@ pub async fn forgot_password(
 
     if let Err(e) = email_sent {
         eprintln!("Failed to send forgot password email: {}", e);
-        return Err(HttpError::server_error("Failed to send email".to_string()));
+        return Err(HttpError::server_error(ErrorMessage::EmailPasswordError.to_string()));
     }
 
-    let response = ForgotPasswordResponse {
+    let response = Response {
         message: "Password reset link has been sent to your email.".to_string(),
         status: "success".to_string(),
     };
@@ -414,14 +463,18 @@ pub async fn reset_password(
         .get_user(UserQuery::Token(&body.token))
         .map_err(|e| HttpError::server_error(e.to_string()))?;
 
-    let user = result.ok_or(HttpError::bad_request("Invalid or expired token".to_string()))?;
+    let user = result.ok_or(HttpError::bad_request(ErrorMessage::InvalidToken.to_string()))?;
 
     if let Some(expires_at) = user.token_expires_at {
         if Utc::now() > expires_at {
-            return Err(HttpError::bad_request("Verification token has expired".to_string()))?;
+            return Err(
+                HttpError::bad_request(ErrorMessage::VerificationTokenExpiredError.to_string())
+            )?;
         }
     } else {
-        return Err(HttpError::bad_request("Invalid verification token".to_string()))?;
+        return Err(
+            HttpError::bad_request(ErrorMessage::VerificationTokenInvalidError.to_string())
+        )?;
     }
 
     let user_id = uuid::Uuid::parse_str(&user.id.to_string()).unwrap();
@@ -431,14 +484,14 @@ pub async fn reset_password(
     )?;
 
     state.config.database
-        .update_user_password(user_id.clone(), hash_password).await
+        .update_user_password(user_id.clone(), hash_password)
         .map_err(|e| HttpError::server_error(e.to_string()))?;
 
     state.config.database
-        .verified_token(&body.token).await
+        .verified_token(&body.token)
         .map_err(|e| HttpError::server_error(e.to_string()))?;
 
-    let response = ResetPasswordResponse {
+    let response = Response {
         message: "Password has been successfully reset.".to_string(),
         status: "success".to_string(),
     };
