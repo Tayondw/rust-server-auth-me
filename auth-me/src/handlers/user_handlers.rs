@@ -1,4 +1,5 @@
 use std::sync::Arc;
+
 use axum::{ extract::{ State, Path }, Json, http::StatusCode };
 use diesel::{
     prelude::*,
@@ -7,6 +8,8 @@ use diesel::{
     result::Error,
 };
 use uuid::Uuid;
+use serde_json::{json, Value};
+
 use crate::{
     models::User,
     schema::users::{ self },
@@ -14,7 +17,7 @@ use crate::{
     database::DbConnExt,
     operations::user_operations::{ create_user, update_user, delete_user },
     errors::{ HttpError, ErrorMessage },
-    dto::user_dtos::{ CreateUserRequest, UpdateUserRequest }
+    dto::user_dtos::{ CreateUserRequest, UpdateUserRequest },
 };
 
 // GET ALL USERS
@@ -66,7 +69,14 @@ pub async fn create_user_handler(
 ) -> Result<Json<User>, HttpError> {
     let mut conn: PooledConnection<ConnectionManager<PgConnection>> = state.conn()?;
 
-    create_user(&mut conn, user_data.email, user_data.name, user_data.username, user_data.password, user_data.verified)
+    create_user(
+        &mut conn,
+        user_data.email,
+        user_data.name,
+        user_data.username,
+        user_data.password,
+        user_data.verified
+    )
         .map(Json)
         .map_err(|e| {
             if e.to_string().contains("UNIQUE constraint failed") {
@@ -115,4 +125,69 @@ pub async fn delete_user_handler(
             Err(HttpError::server_error(ErrorMessage::DeleteUserError.to_string()))
         }
     }
+}
+
+pub async fn list_users(State(state): State<Arc<AppState>>) -> Result<Json<Value>, HttpError> {
+    // Basic user list for managers - limited info
+    let users =
+        json!({
+        "users": [
+            {
+                "id": 1,
+                "email": "user1@example.com",
+                "role": "User",
+                "active": true
+            },
+            {
+                "id": 2,
+                "email": "user2@example.com", 
+                "role": "User",
+                "active": true
+            }
+        ],
+        "total_count": 2
+    });
+
+    Ok(Json(users))
+}
+
+pub async fn list_all_users(State(state): State<Arc<AppState>>) -> Result<Json<Value>, HttpError> {
+    // Full user list for admins - includes sensitive info
+    let users =
+        json!({
+        "users": [
+            {
+                "id": 1,
+                "email": "user1@example.com",
+                "role": "User",
+                "active": true,
+                "created_at": "2024-01-10T08:00:00Z",
+                "last_login": "2024-01-20T14:30:00Z",
+                "email_verified": true
+            },
+            {
+                "id": 2,
+                "email": "user2@example.com",
+                "role": "User", 
+                "active": true,
+                "created_at": "2024-01-12T09:15:00Z",
+                "last_login": "2024-01-19T16:45:00Z",
+                "email_verified": true
+            },
+            {
+                "id": 3,
+                "email": "admin@example.com",
+                "role": "Admin",
+                "active": true,
+                "created_at": "2024-01-01T00:00:00Z",
+                "last_login": "2024-01-21T10:00:00Z",
+                "email_verified": true
+            }
+        ],
+        "total_count": 3,
+        "admin_count": 1,
+        "active_count": 3
+    });
+
+    Ok(Json(users))
 }
