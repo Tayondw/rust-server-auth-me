@@ -42,12 +42,6 @@ pub struct ForgotPasswordRequest {
     pub email: String,
 }
 
-#[derive(Serialize)]
-pub struct ForgotPasswordResponse {
-    pub message: String,
-    pub status: String,
-}
-
 #[derive(Debug, Serialize, Deserialize, Validate, Clone)]
 pub struct ResetPasswordRequest {
     #[validate(length(min = 1, message = "Token is required."))]
@@ -65,10 +59,4 @@ pub struct ResetPasswordRequest {
         must_match(other = "new_password", message = "new passwords do not match")
     )]
     pub new_password_confirm: String,
-}
-
-#[derive(Serialize)]
-pub struct ResetPasswordResponse {
-    pub message: String,
-    pub status: String,
 }
