@@ -37,8 +37,11 @@ pub enum ErrorMessage {
     UserUpdateError,
     NotFound,
     EmailVerificationError,
-    EmailNotFound,
-    PasswordComparison
+    EmailNotFoundError,
+    EmailPasswordError,
+    PasswordComparison,
+    VerificationTokenExpiredError,
+    VerificationTokenInvalidError
 }
 
 impl ToString for ErrorMessage {
@@ -52,7 +55,8 @@ impl ErrorMessage {
         match self {
             ErrorMessage::DatabaseError => "Error connecting to the database".to_string(),
             ErrorMessage::DeleteUserError => "Unable to delete the user".to_string(),
-            ErrorMessage::EmailNotFound => "Email not found".to_string(),
+            ErrorMessage::EmailNotFoundError => "Unable to find email".to_string(),
+            ErrorMessage::EmailPasswordError => "Failed to send forgot password email".to_string(),
             ErrorMessage::EmailVerificationError => "Failed to send verification email".to_string(),
             ErrorMessage::EmptyPassword => "Password cannot be empty".to_string(),
             ErrorMessage::ExceededMaxPasswordLength(max_length) =>
@@ -82,6 +86,10 @@ impl ErrorMessage {
                 "User with this email and/ or username already exists".to_string(),
             ErrorMessage::UserUpdateError =>
                 "Unable to update user: email, username, password, or name maybe incorrect format or in use OR the user id does not exist".to_string(),
+            ErrorMessage::VerificationTokenExpiredError =>
+                "Verification token has expired".to_string(),
+            ErrorMessage::VerificationTokenInvalidError =>
+                "Verification token is invalid".to_string(),
             ErrorMessage::WrongCredentials =>
                 "Email, username, or password is incorrect".to_string(),
         }
