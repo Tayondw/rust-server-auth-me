@@ -4,7 +4,6 @@ mod schema;
 mod dto;
 mod errors;
 mod database;
-mod auth;
 mod middleware;
 mod email;
 mod utils;
@@ -14,15 +13,14 @@ mod routes;
 
 use std::{ net::SocketAddr, sync::Arc };
 
-use axum::{ extract::Extension, middleware::from_fn, routing::get, Router };
+use axum::{ extract::Extension, middleware::from_fn, Router };
 use diesel::{ prelude::*, r2d2::{ ConnectionManager, Pool } };
 use config::Config;
 use dotenvy::dotenv;
-use routes::{ api::users_router::user_routes, general_router::general_routes };
-use auth::router::authentication_routes;
+use routes:: create_router;
 use tower_http::{ cors::CorsLayer, trace::TraceLayer };
 use middleware::{
-    csrf::{ csrf_middleware, TokenStore, get_csrf_token },
+    csrf::{ csrf_middleware, TokenStore },
     cors::create_cors_layer,
     cookies::cookie_layer,
     security_headers::security_headers,
@@ -71,10 +69,7 @@ async fn main() -> Result<(), HttpError> {
     let token_store: Arc<TokenStore> = Arc::new(TokenStore::new());
 
     let app = Router::new()
-        .merge(user_routes(shared_state.clone()))
-        .merge(general_routes())
-        .nest("/api/auth", authentication_routes(shared_state.clone()))
-        .route("/csrf-token", get(get_csrf_token))
+        .merge(create_router(shared_state.clone()))
         .with_state(shared_state)
         .layer(from_fn(csrf_middleware))
         .layer(Extension(token_store))
