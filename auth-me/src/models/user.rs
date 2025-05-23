@@ -24,6 +24,7 @@ pub struct UserRoleType;
 pub enum UserRole {
     Admin,
     User,
+    Manager
 }
 
 impl UserRole {
@@ -31,6 +32,7 @@ impl UserRole {
         match self {
             UserRole::Admin => "admin",
             UserRole::User => "user",
+            UserRole::Manager => "manager"
         }
     }
 }
