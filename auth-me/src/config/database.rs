@@ -1,15 +1,14 @@
-use std::env;
-use std::time::Duration;
+use std::{ env, time::Duration };
 
 use thiserror::Error;
-use diesel::{ prelude::*, PgConnection };
-use diesel::result::Error as DieselError;
-use diesel::r2d2::{ Pool, ConnectionManager, PoolError as R2D2Error };
-
+use diesel::{
+    prelude::*,
+    PgConnection,
+    result::Error as DieselError,
+    r2d2::{ Pool, ConnectionManager, PoolError as R2D2Error },
+};
 use serde::Deserialize;
-
 use chrono::{ NaiveDateTime, Utc };
-
 use uuid::Uuid;
 
 use crate::{ schema::users::dsl::*, models::User, dto::user_dtos::UserQuery };
@@ -141,9 +140,9 @@ impl DatabaseConfig {
                 })?,
         };
 
-        env_logger::Builder
-            ::from_env(env_logger::Env::default().default_filter_or(&raw.rust_log))
-            .init();
+      //   env_logger::Builder
+      //       ::from_env(env_logger::Env::default().default_filter_or(&raw.rust_log))
+      //       .init();
 
         DatabaseConfig::from_raw(raw).map_err(|e| {
             ConfigError::Config(format!("Database pool creation failed: {}", e))
@@ -211,6 +210,21 @@ impl DatabaseConfig {
                 token_expires_at.eq(Some(expires_at)),
                 updated_at.eq(Utc::now().naive_utc()),
             ))
+            .execute(&mut conn)?;
+
+        Ok(())
+    }
+
+    pub fn update_user_password(
+        &self,
+        user_id: Uuid,
+        new_hashed_password: String
+    ) -> Result<(), ConfigError> {
+        let mut conn = self.pool.get()?;
+
+        diesel
+            ::update(users.filter(id.eq(user_id)))
+            .set((password.eq(new_hashed_password), updated_at.eq(Utc::now().naive_utc())))
             .execute(&mut conn)?;
 
         Ok(())
