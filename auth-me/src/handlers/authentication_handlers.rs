@@ -71,8 +71,8 @@ pub async fn signup_handler(
         // Create user with the hashed password
         let user = create_user(
             conn,
-            signup_data.email.clone(),
             signup_data.name.clone(),
+            signup_data.email.clone(),
             signup_data.username.clone(),
             hashed_password, // Use the argon2 hashed password instead of raw password
             signup_data.verified.clone()
