@@ -33,7 +33,7 @@ pub fn create_authenticated_routes() -> Router<Arc<AppState>> {
         .route("/auth/logout", post(logout_handler))
         .route("/auth/profile", get(get_profile))
         .route("/auth/protected", get(protected_handler))
-        .layer(middleware::from_fn_with_state(Arc::new(()), auth_middleware))
+        .layer(middleware::from_fn(auth_middleware))
 }
 
 // Auth router assembly function
