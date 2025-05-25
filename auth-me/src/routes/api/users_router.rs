@@ -33,7 +33,7 @@ pub fn users_handler() -> Router<Arc<AppState>> {
             "/users/{id}",
             patch(update_user_handler).get(get_user_by_id).delete(delete_user_handler)
         )
-        .layer(middleware::from_fn(require_roles(vec![UserRole::Admin])))
+      //   .layer(middleware::from_fn(require_roles(vec![UserRole::Admin])))
         .layer(middleware::from_fn(auth_middleware))
         
         // Merge manager and admin API routes (these have their own auth)
