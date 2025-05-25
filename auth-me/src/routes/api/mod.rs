@@ -23,6 +23,7 @@ pub fn setup_complete_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
 
         // Add shared services and cookie layer for the entire API
         .layer(Extension(auth_service))
+        .layer(Extension(Arc::new(state.config.database.clone())))
         .layer(cookie_layer())
         .with_state(state)
 }
