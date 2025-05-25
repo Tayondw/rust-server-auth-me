@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::{ extract::{ State, Path }, Json, http::StatusCode };
+use axum::{ extract::{ State, Path, Query }, Json, http::StatusCode };
 use diesel::{
     prelude::*,
     r2d2::{ PooledConnection, ConnectionManager },
@@ -8,58 +8,130 @@ use diesel::{
     result::Error,
 };
 use uuid::Uuid;
-use serde_json::{json, Value};
+use serde_json::{ json, Value };
+use validator::Validate;
 
 use crate::{
     models::User,
+    config::ConfigError,
     schema::users::{ self },
     AppState,
     database::DbConnExt,
     operations::user_operations::{ create_user, update_user, delete_user },
     errors::{ HttpError, ErrorMessage },
-    dto::user_dtos::{ CreateUserRequest, UpdateUserRequest },
+    dto::user_dtos::{
+        CreateUserRequest,
+        UpdateUserRequest,
+        RequestQuery,
+        UserListResponse,
+        FilterUser,
+        UserSearchQuery,
+        UserData,
+        SingleUserResponse,
+        UserQuery,
+    },
 };
 
-// GET ALL USERS
-pub async fn get_users(State(state): State<Arc<AppState>>) -> Result<Json<Vec<User>>, HttpError> {
-    let mut conn: PooledConnection<ConnectionManager<PgConnection>> = state.conn()?;
+/// GET ALL USERS
+pub async fn get_users(
+    Query(query_params): Query<RequestQuery>,
+    State(state): State<Arc<AppState>>
+) -> Result<Json<UserListResponse>, HttpError> {
+    // Validate input
+    query_params
+        .validate()
+        .map_err(|e| HttpError::bad_request(format!("Validation error: {}", e)))?;
 
-    // Execute the query (directly, no interact needed)
-    let users_result: Result<Vec<User>, Error> = users::table
-        .select(User::as_select())
-        .load(&mut *conn);
+    let page = query_params.page.unwrap_or(1);
+    let limit = query_params.limit.unwrap_or(10);
 
-    match users_result {
-        Ok(users) => Ok(Json(users)),
-        Err(_) => Err(HttpError::server_error(ErrorMessage::DatabaseError.to_string())),
-    }
+    // Delegate to database layer
+    let (users, total_count) = state.config.database
+        .get_users_paginated(page, limit)
+        .map_err(|e| HttpError::server_error(e.to_string()))?;
+
+    let total_pages = (((total_count as usize) + limit - 1) / limit).max(1);
+
+    // Return filtered response (no raw models exposed)
+    let response = UserListResponse {
+        status: "success".to_string(),
+        users: FilterUser::filter_users(&users), // This filters out sensitive data
+        results: total_count as usize,
+        page,
+        limit,
+        total_pages,
+    };
+
+    Ok(Json(response))
 }
 
-// GET USER BY ID
+/// GET USER BY ID
 pub async fn get_user_by_id(
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<Uuid>
-) -> Result<Json<User>, HttpError> {
-    let mut conn: PooledConnection<ConnectionManager<PgConnection>> = state.conn()?;
-
-    // Query the database for the user
-    let user_result = users::table
-        .find(user_id) // Using find for primary key lookup
-        .select(User::as_select())
-        .first(&mut *conn)
+) -> Result<Json<SingleUserResponse>, HttpError> {
+    // Use your existing get_user method
+    let user = state.config.database
+        .get_user(UserQuery::Id(user_id))
         .map_err(|e| {
             match e {
-                Error::NotFound => {
+                ConfigError::NotFound =>
                     HttpError::new(
                         ErrorMessage::UserNoLongerExists.to_string(),
                         StatusCode::NOT_FOUND
-                    )
-                }
-                _ => HttpError::server_error(ErrorMessage::DatabaseError.to_string()),
+                    ),
+                _ => HttpError::server_error(e.to_string()),
             }
-        })?;
+        })?
+        .ok_or_else(||
+            HttpError::new(ErrorMessage::UserNoLongerExists.to_string(), StatusCode::NOT_FOUND)
+        )?;
 
-    Ok(Json(user_result))
+    let response = SingleUserResponse {
+        status: "success".to_string(),
+        data: UserData {
+            user: FilterUser::filter_user(&user), // Filtered, not raw model
+        },
+    };
+
+    Ok(Json(response))
+}
+
+// SEARCH USERS - Advanced filtering
+pub async fn search_users(
+    Query(query_params): Query<UserSearchQuery>,
+    State(state): State<Arc<AppState>>
+) -> Result<Json<UserListResponse>, HttpError> {
+    query_params
+        .validate()
+        .map_err(|e| HttpError::bad_request(format!("Validation error: {}", e)))?;
+
+    let page = query_params.page.unwrap_or(1);
+    let limit = query_params.limit.unwrap_or(10);
+
+    // Delegate to database layer with search parameters
+    let (users, total_count) = state.config.database
+        .search_users(
+            page,
+            limit,
+            query_params.search.as_deref(),
+            query_params.role,
+            query_params.verified
+        )
+        .map_err(|e| HttpError::server_error(e.to_string()))?;
+
+    let total_pages = (((total_count as usize) + limit - 1) / limit).max(1);
+
+    let response = UserListResponse {
+        status: "success".to_string(),
+        users: FilterUser::filter_users(&users), // Filtered response
+        results: total_count as usize,
+        page,
+        limit,
+        total_pages,
+    };
+
+    Ok(Json(response))
 }
 
 // CREATE NEW USER
