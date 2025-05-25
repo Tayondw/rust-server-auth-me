@@ -6,7 +6,7 @@ use validator::{ Validate, ValidationError };
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
-use crate::models::User;
+use crate::models::{ User, UserRole };
 
 #[derive(Validate, Debug, Default, Clone, Serialize, Deserialize)]
 pub struct CreateUserRequest {
@@ -42,10 +42,13 @@ pub struct CreateUserRequest {
     #[serde(rename = "passwordConfirm")]
     pub password_confirm: String,
 
+    #[serde(default)]
     pub verified: bool,
 
     #[validate(custom = "validate_terms_acceptance")]
     pub terms_accepted: bool,
+
+    pub role: Option<String>,
 }
 
 // Custom password validator function
@@ -80,6 +83,7 @@ pub enum UserQuery<'a> {
     Name(&'a str),
     Username(&'a str),
     Token(&'a str),
+    Role(&'a str)
 }
 
 #[derive(Serialize, Deserialize, Validate)]
@@ -98,6 +102,7 @@ pub struct FilterUser {
     pub email: String,
     pub username: String,
     pub verified: bool,
+    pub role: String,
     #[serde(rename = "createdAt")]
     pub created_at: DateTime<Utc>,
     #[serde(rename = "updatedAt")]
@@ -112,6 +117,7 @@ impl FilterUser {
             email: user.email.to_owned(),
             username: user.username.to_owned(),
             verified: user.verified,
+            role: user.role.to_str().to_string(),
             created_at: user.created_at.unwrap(),
             updated_at: user.updated_at.unwrap(),
         }
@@ -122,9 +128,41 @@ impl FilterUser {
     }
 }
 
+#[derive(Serialize, Deserialize, Validate)]
+pub struct UserSearchQuery {
+    #[validate(range(min = 1))]
+    pub page: Option<usize>,
+
+    #[validate(range(min = 1, max = 50))]
+    pub limit: Option<usize>,
+
+    #[validate(length(min = 1, max = 100))]
+    pub search: Option<String>,
+
+    pub role: Option<UserRole>,
+
+    pub verified: Option<bool>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserData {
     pub user: FilterUser,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserListResponse {
+    pub status: String,
+    pub users: Vec<FilterUser>,
+    pub results: usize,
+    pub page: usize,
+    pub limit: usize,
+    pub total_pages: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SingleUserResponse {
+    pub status: String,
+    pub data: UserData,
 }
 
 #[derive(Deserialize)]
@@ -137,4 +175,17 @@ pub struct UpdateUserRequest {
     pub username: Option<String>,
     #[serde(default)]
     pub password: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct RoleUpdateDto {
+    #[validate(custom = "validate_user_role")]
+    pub role: UserRole,
+}
+
+fn validate_user_role(role: &UserRole) -> Result<(), validator::ValidationError> {
+    match role {
+        UserRole::Admin | UserRole::User => Ok(()),
+        _ => Err(validator::ValidationError::new("invalid_role")),
+    }
 }
