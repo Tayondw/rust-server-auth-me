@@ -735,3 +735,44 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 //             })
 //         )
 // }
+
+// GET ALL USERS
+// pub async fn get_users(State(state): State<Arc<AppState>>) -> Result<Json<Vec<User>>, HttpError> {
+//     let mut conn: PooledConnection<ConnectionManager<PgConnection>> = state.conn()?;
+
+//     // Execute the query (directly, no interact needed)
+//     let users_result: Result<Vec<User>, Error> = users::table
+//         .select(User::as_select())
+//         .load(&mut *conn);
+
+//     match users_result {
+//         Ok(users) => Ok(Json(users)),
+//         Err(_) => Err(HttpError::server_error(ErrorMessage::DatabaseError.to_string())),
+//     }
+// }
+
+// pub async fn get_user_by_id(
+//     State(state): State<Arc<AppState>>,
+//     Path(user_id): Path<Uuid>
+// ) -> Result<Json<User>, HttpError> {
+//     let mut conn: PooledConnection<ConnectionManager<PgConnection>> = state.conn()?;
+
+//     // Query the database for the user
+//     let user_result = users::table
+//         .find(user_id) // Using find for primary key lookup
+//         .select(User::as_select())
+//         .first(&mut *conn)
+//         .map_err(|e| {
+//             match e {
+//                 Error::NotFound => {
+//                     HttpError::new(
+//                         ErrorMessage::UserNoLongerExists.to_string(),
+//                         StatusCode::NOT_FOUND
+//                     )
+//                 }
+//                 _ => HttpError::server_error(ErrorMessage::DatabaseError.to_string()),
+//             }
+//         })?;
+
+//     Ok(Json(user_result))
+// }
