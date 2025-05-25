@@ -11,7 +11,7 @@ use axum_extra::extract::CookieJar;
 
 use crate::{
     models::{ User, UserRole },
-    utils::token::{ AuthService, decode_token },
+    utils::token::AuthService,
     config::{ DatabaseConfig, ConfigError },
 };
 
@@ -40,8 +40,8 @@ pub async fn auth_middleware(
     // Extract token from cookies or Authorization header
     let token: String = extract_token(&request)?;
 
-    // Decode token to get user ID using your existing function
-    let user_id: String = decode_token(token, auth_service.get_access_secret()).map_err(
+     // Decode token to get user ID using your existing function
+    let user_id: String = auth_service.extract_user_id_from_token(&token, false).map_err(
         |_| StatusCode::UNAUTHORIZED
     )?;
 
