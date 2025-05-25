@@ -6,12 +6,20 @@ use diesel::{
     PgConnection,
     result::Error as DieselError,
     r2d2::{ Pool, ConnectionManager, PoolError as R2D2Error },
+    ExpressionMethods,
+    QueryDsl,
+    RunQueryDsl,
+    BoolExpressionMethods,
 };
 use serde::Deserialize;
 use chrono::{ NaiveDateTime, Utc };
 use uuid::Uuid;
 
-use crate::{ schema::users::dsl::*, models::User, dto::user_dtos::UserQuery };
+use crate::{
+    schema::users::{ self, dsl::* },
+    models::{ User, UserRole },
+    dto::user_dtos::UserQuery,
+};
 
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 
@@ -53,7 +61,7 @@ pub struct RawDatabaseConfig {
     pub jwt_refresh_expires_in: i64,
 }
 
-// Basic validation to check for empty strings or invalid numbers
+/// Basic validation to check for empty strings or invalid numbers
 impl RawDatabaseConfig {
     pub fn validate(&self) -> Result<(), ConfigError> {
         if self.database_url.trim().is_empty() {
@@ -140,9 +148,9 @@ impl DatabaseConfig {
                 })?,
         };
 
-      //   env_logger::Builder
-      //       ::from_env(env_logger::Env::default().default_filter_or(&raw.rust_log))
-      //       .init();
+        //   env_logger::Builder
+        //       ::from_env(env_logger::Env::default().default_filter_or(&raw.rust_log))
+        //       .init();
 
         DatabaseConfig::from_raw(raw).map_err(|e| {
             ConfigError::Config(format!("Database pool creation failed: {}", e))
@@ -163,9 +171,85 @@ impl DatabaseConfig {
                 users.filter(username.eq(name_str)).first::<User>(&mut conn).optional()?,
             UserQuery::Token(token_str) =>
                 users.filter(verification_token.eq(token_str)).first::<User>(&mut conn).optional()?,
+            UserQuery::Role(role_str) =>
+                users.filter(verification_token.eq(role_str)).first::<User>(&mut conn).optional()?,
         };
 
         Ok(result)
+    }
+
+    pub fn get_users_paginated(
+        &self,
+        page: usize,
+        limit: usize
+    ) -> Result<(Vec<User>, i64), ConfigError> {
+        let mut conn = self.pool.get()?;
+        let offset = (page - 1) * limit;
+
+        // Get paginated users - use the table from schema module
+        let user_list = users::table
+            .select(User::as_select())
+            .limit(limit as i64)
+            .offset(offset as i64)
+            .order(users::created_at.desc()) // Use the column from schema module
+            .load(&mut conn)?;
+
+        // Get total count
+        let total_count: i64 = users::table.count().get_result(&mut conn)?;
+
+        Ok((user_list, total_count))
+    }
+
+    pub fn search_users(
+        &self,
+        page: usize,
+        limit: usize,
+        search_term: Option<&str>,
+        role_filter: Option<UserRole>,
+        verified_filter: Option<bool>
+    ) -> Result<(Vec<User>, i64), ConfigError> {
+        let mut conn = self.pool.get()?;
+        let offset = (page - 1) * limit;
+
+        // Create the search pattern that will live for the entire function
+        let search_pattern = search_term.map(|search| format!("%{}%", search));
+
+        // Build dynamic query - use users::table, not users::table
+        let mut query = users::table.into_boxed();
+        let mut count_query = users::table.into_boxed();
+
+        if let Some(ref pattern) = search_pattern {
+            // Use the columns from the schema module
+            let search_filter = users::name
+                .ilike(pattern)
+                .or(users::email.ilike(pattern))
+                .or(users::username.ilike(pattern));
+
+            query = query.filter(search_filter.clone());
+            count_query = count_query.filter(search_filter);
+        }
+
+        if let Some(user_role) = role_filter {
+            query = query.filter(users::role.eq(role));
+            count_query = count_query.filter(users::role.eq(user_role));
+        }
+
+        if let Some(is_verified) = verified_filter {
+            query = query.filter(users::verified.eq(verified));
+            count_query = count_query.filter(users::verified.eq(is_verified));
+        }
+
+        // Execute queries
+        let user_list = query
+            .select(User::as_select())
+            .limit(limit as i64)
+            .offset(offset as i64)
+            .order(users::created_at.desc())
+            .load(&mut conn)?;
+
+        let total_count: i64 = count_query.count().get_result(&mut conn)?;
+
+        Ok((user_list, total_count))
     }
 
     pub fn verified_token(&self, token_str: &str) -> Result<(), ConfigError> {
@@ -230,7 +314,7 @@ impl DatabaseConfig {
         Ok(())
     }
 
-    // FOR TESTING PURPOSES
+    /// FOR TESTING PURPOSES
     pub fn with_pool(pool: PgPool) -> Self {
         Self {
             database_url: "".into(),
