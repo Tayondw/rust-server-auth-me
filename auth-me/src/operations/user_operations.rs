@@ -15,8 +15,8 @@ pub fn create_user(
 
     let new_user: NewUser = NewUser {
         name,
-        username,
         email,
+        username,
         password,
         verified,
         verification_token: token,
