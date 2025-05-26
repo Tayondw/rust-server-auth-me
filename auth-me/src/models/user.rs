@@ -8,9 +8,10 @@ use diesel::{
     sql_types::SqlType,
     AsExpression,
     FromSqlRow,
+    query_builder::QueryId
 };
 use serde::{ Deserialize, Serialize };
-use chrono::{ DateTime, Utc };
+use chrono::NaiveDateTime;
 use uuid::Uuid;
 
 use crate::schema::users;
@@ -19,12 +20,19 @@ use crate::schema::users;
 #[diesel(postgres_type(name = "user_role"))]
 pub struct UserRoleType;
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy, AsExpression, PartialEq, FromSqlRow)]
+// Implement QueryId for UserRoleType
+impl QueryId for UserRoleType {
+    type QueryId = UserRoleType;
+    const HAS_STATIC_QUERY_ID: bool = true;
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, AsExpression, PartialEq, FromSqlRow, Eq)]
 #[diesel(sql_type = UserRoleType)]
 pub enum UserRole {
     Admin,
     User,
-    Manager
+    Manager,
+    Moderator,
 }
 
 impl UserRole {
@@ -32,7 +40,8 @@ impl UserRole {
         match self {
             UserRole::Admin => "admin",
             UserRole::User => "user",
-            UserRole::Manager => "manager"
+            UserRole::Manager => "manager",
+            UserRole::Moderator => "moderator",
         }
     }
 }
@@ -51,6 +60,8 @@ impl FromSql<UserRoleType, Pg> for UserRole {
         match value.as_bytes() {
             b"admin" => Ok(UserRole::Admin),
             b"user" => Ok(UserRole::User),
+            b"manager" => Ok(UserRole::Manager),
+            b"moderator" => Ok(UserRole::Moderator),
             _ => Err("Unrecognized enum variant for user_role".into()),
         }
     }
@@ -67,10 +78,10 @@ pub struct User {
     pub password: String,
     pub verified: bool,
     pub verification_token: Option<String>,
-    pub token_expires_at: Option<DateTime<Utc>>,
+    pub token_expires_at: Option<NaiveDateTime>,
     pub role: UserRole,
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
+    pub created_at: Option<NaiveDateTime>,
+    pub updated_at: Option<NaiveDateTime>,
 }
 
 #[derive(Insertable, Deserialize, Debug)]
@@ -82,13 +93,18 @@ pub struct NewUser {
     pub password: String,
     pub verified: bool,
     pub verification_token: Option<String>,
+    pub token_expires_at: Option<NaiveDateTime>,
+    pub role: UserRole,
 }
 
 #[derive(AsChangeset, Deserialize, Debug)]
 #[diesel(table_name = users)]
 pub struct UpdateUser {
-    pub name: Option<String>,
-    pub username: Option<String>,
-    pub email: Option<String>,
-    pub password: Option<String>,
+    pub name: String,
+    pub email: String,
+    pub username: String,
+    pub password: String,
+    pub verified: bool,
+    pub role: UserRole,
+    pub updated_at: NaiveDateTime,
 }
