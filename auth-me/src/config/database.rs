@@ -2,24 +2,11 @@ use std::{ env, time::Duration };
 
 use thiserror::Error;
 use diesel::{
-    prelude::*,
     PgConnection,
     result::Error as DieselError,
     r2d2::{ Pool, ConnectionManager, PoolError as R2D2Error },
-    ExpressionMethods,
-    QueryDsl,
-    RunQueryDsl,
-    BoolExpressionMethods,
 };
 use serde::Deserialize;
-use chrono::{ NaiveDateTime, Utc };
-use uuid::Uuid;
-
-use crate::{
-    schema::users::{ self, dsl::* },
-    models::{ User, UserRole },
-    dto::user_dtos::UserQuery,
-};
 
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 
