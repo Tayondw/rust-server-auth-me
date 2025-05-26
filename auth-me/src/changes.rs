@@ -776,3 +776,172 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 
 //     Ok(Json(user_result))
 // }
+
+// DATABASE CONFIG IMPL
+
+//  pub fn get_user(&self, query: UserQuery) -> Result<Option<User>, ConfigError> {
+//         let mut conn = self.pool.get()?;
+
+//         let result = match query {
+//             UserQuery::Id(user_id) =>
+//                 users.filter(id.eq(user_id)).first::<User>(&mut conn).optional()?,
+//             UserQuery::Email(email_str) =>
+//                 users.filter(email.eq(email_str)).first::<User>(&mut conn).optional()?,
+//             UserQuery::Name(name_str) =>
+//                 users.filter(name.eq(name_str)).first::<User>(&mut conn).optional()?,
+//             UserQuery::Username(name_str) =>
+//                 users.filter(username.eq(name_str)).first::<User>(&mut conn).optional()?,
+//             UserQuery::Token(token_str) =>
+//                 users.filter(verification_token.eq(token_str)).first::<User>(&mut conn).optional()?,
+//             UserQuery::Role(role_str) =>
+//                 users.filter(verification_token.eq(role_str)).first::<User>(&mut conn).optional()?,
+//         };
+
+//         Ok(result)
+//     }
+// pub fn get_users_paginated(
+//         &self,
+//         page: usize,
+//         limit: usize
+//     ) -> Result<(Vec<User>, i64), ConfigError> {
+//         let mut conn = self.pool.get()?;
+//         let offset = (page - 1) * limit;
+
+//         // Get paginated users - use the table from schema module
+//         let user_list = users::table
+//             .select(User::as_select())
+//             .limit(limit as i64)
+//             .offset(offset as i64)
+//             .order(users::created_at.desc()) // Use the column from schema module
+//             .load(&mut conn)?;
+
+//         // Get total count
+//         let total_count: i64 = users::table.count().get_result(&mut conn)?;
+
+//         Ok((user_list, total_count))
+//     }
+// pub fn search_users(
+//     &self,
+//     page: usize,
+//     limit: usize,
+//     search_term: Option<&str>,
+//     role_filter: Option<UserRole>,
+//     verified_filter: Option<bool>
+// ) -> Result<(Vec<User>, i64), ConfigError> {
+//     let mut conn = self.pool.get()?;
+//     let offset = (page - 1) * limit;
+
+//     // Create the search pattern that will live for the entire function
+//     let search_pattern = search_term.map(|search| format!("%{}%", search));
+
+//     // Build dynamic query - use users::table, not users::table
+//     let mut query = users::table.into_boxed();
+//     let mut count_query = users::table.into_boxed();
+
+//     if let Some(ref pattern) = search_pattern {
+//         // Use the columns from the schema module
+//         let search_filter = users::name
+//             .ilike(pattern)
+//             .or(users::email.ilike(pattern))
+//             .or(users::username.ilike(pattern));
+
+//         query = query.filter(search_filter.clone());
+//         count_query = count_query.filter(search_filter);
+//     }
+
+//     if let Some(user_role) = role_filter {
+//         query = query.filter(users::role.eq(role));
+//         count_query = count_query.filter(users::role.eq(user_role));
+//     }
+
+//     if let Some(is_verified) = verified_filter {
+//         query = query.filter(users::verified.eq(verified));
+//         count_query = count_query.filter(users::verified.eq(is_verified));
+//     }
+
+//     // Execute queries
+//     let user_list = query
+//         .select(User::as_select())
+//         .limit(limit as i64)
+//         .offset(offset as i64)
+//         .order(users::created_at.desc())
+//         .load(&mut conn)?;
+
+//     let total_count: i64 = count_query.count().get_result(&mut conn)?;
+
+//     Ok((user_list, total_count))
+// }
+// pub fn verified_token(&self, token_str: &str) -> Result<(), ConfigError> {
+//         let mut conn = self.pool.get()?;
+
+//         let now = Utc::now().naive_utc();
+
+//         let target_user = users
+//             .filter(verification_token.eq(Some(token_str.to_string())))
+//             .filter(token_expires_at.gt(now))
+//             .first::<User>(&mut conn)
+//             .optional()?;
+
+//         if let Some(user) = target_user {
+//             diesel
+//                 ::update(users.filter(id.eq(user.id)))
+//                 .set((
+//                     verified.eq(true),
+//                     verification_token.eq::<Option<String>>(None),
+//                     token_expires_at.eq::<Option<NaiveDateTime>>(None),
+//                     updated_at.eq(now),
+//                 ))
+//                 .execute(&mut conn)?;
+//             Ok(())
+//         } else {
+//             Err(ConfigError::NotFound)
+//         }
+//     }
+
+//     pub fn add_verified_token(
+//         &self,
+//         user_id: Uuid,
+//         token: String,
+//         expires_at: NaiveDateTime
+//     ) -> Result<(), ConfigError> {
+//         let mut conn = self.pool.get()?;
+
+//         diesel
+//             ::update(users.filter(id.eq(user_id)))
+//             .set((
+//                 verification_token.eq(Some(token)),
+//                 token_expires_at.eq(Some(expires_at)),
+//                 updated_at.eq(Utc::now().naive_utc()),
+//             ))
+//             .execute(&mut conn)?;
+
+//         Ok(())
+//     }
+
+//     pub fn update_user_password(
+//         &self,
+//         user_id: Uuid,
+//         new_hashed_password: String
+//     ) -> Result<(), ConfigError> {
+//         let mut conn = self.pool.get()?;
+
+//         diesel
+//             ::update(users.filter(id.eq(user_id)))
+//             .set((password.eq(new_hashed_password), updated_at.eq(Utc::now().naive_utc())))
+//             .execute(&mut conn)?;
+
+//         Ok(())
+//     }
+      //   Self {
+        //       database_url: "".into(),
+        //       jwt_secret: "".into(),
+        //       jwt_refresh_secret: "".into(),
+        //       rust_log: "".into(),
+        //       schema: "".into(),
+        //       jwt_expires_in: 0,
+        //       jwt_refresh_expires_in: 0,
+        //       pool,
+        //       redis_url: "".into(),
+        //       port: 0,
+        //       rate_limit_requests_per_minute: 0,
+        //   }
