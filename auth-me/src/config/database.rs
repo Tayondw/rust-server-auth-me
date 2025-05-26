@@ -33,6 +33,10 @@ pub enum ConfigError {
 
     #[error("Connection pool error: {0}")] Pool(#[from] R2D2Error),
 
+    #[error("Redis error: {0}")] Redis(#[from] redis::RedisError),
+
+    #[error("Failed to get Redis connection")] RedisError,
+
     #[error("Unauthorized access")]
     Unauthorized,
 
@@ -59,6 +63,20 @@ pub struct RawDatabaseConfig {
     pub schema: String,
     pub jwt_expires_in: i64,
     pub jwt_refresh_expires_in: i64,
+    pub redis_url: String,
+    pub port: u16,
+    pub rate_limit_requests_per_minute: u32,
+    // SMTP fields
+    pub smtp_server: String,
+    pub smtp_port: u16,
+    pub smtp_username: String,
+    pub smtp_password: String,
+    pub smtp_from_address: String,
+    // AWS fields
+    pub aws_s3_bucket_name: String,
+    pub aws_s3_key: String,
+    pub aws_s3_secret: String,
+    pub aws_region: String,
 }
 
 /// Basic validation to check for empty strings or invalid numbers
@@ -102,6 +120,20 @@ pub struct DatabaseConfig {
     pub jwt_expires_in: i64,
     pub jwt_refresh_expires_in: i64,
     pub pool: PgPool,
+    pub redis_url: String,
+    pub port: u16,
+    pub rate_limit_requests_per_minute: u32,
+    // SMTP config
+    pub smtp_server: String,
+    pub smtp_port: u16,
+    pub smtp_username: String,
+    pub smtp_password: String,
+    pub smtp_from_address: String,
+    // AWS config
+    pub aws_s3_bucket_name: String,
+    pub aws_s3_key: String,
+    pub aws_s3_secret: String,
+    pub aws_region: String,
 }
 
 impl DatabaseConfig {
@@ -123,6 +155,18 @@ impl DatabaseConfig {
             schema: raw.schema,
             jwt_expires_in: raw.jwt_expires_in,
             jwt_refresh_expires_in: raw.jwt_refresh_expires_in,
+            redis_url: raw.redis_url,
+            port: raw.port,
+            rate_limit_requests_per_minute: raw.rate_limit_requests_per_minute,
+            smtp_server: raw.smtp_server,
+            smtp_port: raw.smtp_port,
+            smtp_username: raw.smtp_username,
+            smtp_password: raw.smtp_password,
+            smtp_from_address: raw.smtp_from_address,
+            aws_s3_bucket_name: raw.aws_s3_bucket_name,
+            aws_s3_key: raw.aws_s3_key,
+            aws_s3_secret: raw.aws_s3_secret,
+            aws_region: raw.aws_region,
         })
     }
 
@@ -146,6 +190,25 @@ impl DatabaseConfig {
                 .map_err(|e| {
                     ConfigError::Config(format!("Failed to parse JWT_REFRESH_EXPIRES_IN: {}", e))
                 })?,
+            redis_url: env
+                ::var("REDIS_URL")
+                .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string()),
+            port: env::var("PORT")?.parse().unwrap_or(3000),
+            rate_limit_requests_per_minute: env::var("RATE_LIMIT_RPM")?.parse().unwrap_or(60),
+            // SMTP config
+            smtp_server: env::var("SMTP_SERVER")?,
+            smtp_port: env
+                ::var("SMTP_PORT")?
+                .parse()
+                .map_err(|e| ConfigError::Config(format!("Failed to parse SMTP_PORT: {}", e)))?,
+            smtp_username: env::var("SMTP_USERNAME")?,
+            smtp_password: env::var("SMTP_PASSWORD")?,
+            smtp_from_address: env::var("SMTP_FROM_ADDRESS")?,
+            // AWS config
+            aws_s3_bucket_name: env::var("AWS_S3_BUCKET_NAME")?,
+            aws_s3_key: env::var("AWS_S3_KEY")?,
+            aws_s3_secret: env::var("AWS_S3_SECRET")?,
+            aws_region: env::var("AWS_REGION")?,
         };
 
         DatabaseConfig::from_raw(raw).map_err(|e| {
@@ -153,174 +216,29 @@ impl DatabaseConfig {
         })
     }
 
-    pub fn get_user(&self, query: UserQuery) -> Result<Option<User>, ConfigError> {
-        let mut conn = self.pool.get()?;
-
-        let result = match query {
-            UserQuery::Id(user_id) =>
-                users.filter(id.eq(user_id)).first::<User>(&mut conn).optional()?,
-            UserQuery::Email(email_str) =>
-                users.filter(email.eq(email_str)).first::<User>(&mut conn).optional()?,
-            UserQuery::Name(name_str) =>
-                users.filter(name.eq(name_str)).first::<User>(&mut conn).optional()?,
-            UserQuery::Username(name_str) =>
-                users.filter(username.eq(name_str)).first::<User>(&mut conn).optional()?,
-            UserQuery::Token(token_str) =>
-                users.filter(verification_token.eq(token_str)).first::<User>(&mut conn).optional()?,
-            UserQuery::Role(role_str) =>
-                users.filter(verification_token.eq(role_str)).first::<User>(&mut conn).optional()?,
-        };
-
-        Ok(result)
-    }
-
-    pub fn get_users_paginated(
-        &self,
-        page: usize,
-        limit: usize
-    ) -> Result<(Vec<User>, i64), ConfigError> {
-        let mut conn = self.pool.get()?;
-        let offset = (page - 1) * limit;
-
-        // Get paginated users - use the table from schema module
-        let user_list = users::table
-            .select(User::as_select())
-            .limit(limit as i64)
-            .offset(offset as i64)
-            .order(users::created_at.desc()) // Use the column from schema module
-            .load(&mut conn)?;
-
-        // Get total count
-        let total_count: i64 = users::table.count().get_result(&mut conn)?;
-
-        Ok((user_list, total_count))
-    }
-
-    pub fn search_users(
-        &self,
-        page: usize,
-        limit: usize,
-        search_term: Option<&str>,
-        role_filter: Option<UserRole>,
-        verified_filter: Option<bool>
-    ) -> Result<(Vec<User>, i64), ConfigError> {
-        let mut conn = self.pool.get()?;
-        let offset = (page - 1) * limit;
-
-        // Create the search pattern that will live for the entire function
-        let search_pattern = search_term.map(|search| format!("%{}%", search));
-
-        // Build dynamic query - use users::table, not users::table
-        let mut query = users::table.into_boxed();
-        let mut count_query = users::table.into_boxed();
-
-        if let Some(ref pattern) = search_pattern {
-            // Use the columns from the schema module
-            let search_filter = users::name
-                .ilike(pattern)
-                .or(users::email.ilike(pattern))
-                .or(users::username.ilike(pattern));
-
-            query = query.filter(search_filter.clone());
-            count_query = count_query.filter(search_filter);
-        }
-
-        if let Some(user_role) = role_filter {
-            query = query.filter(users::role.eq(role));
-            count_query = count_query.filter(users::role.eq(user_role));
-        }
-
-        if let Some(is_verified) = verified_filter {
-            query = query.filter(users::verified.eq(verified));
-            count_query = count_query.filter(users::verified.eq(is_verified));
-        }
-
-        // Execute queries
-        let user_list = query
-            .select(User::as_select())
-            .limit(limit as i64)
-            .offset(offset as i64)
-            .order(users::created_at.desc())
-            .load(&mut conn)?;
-
-        let total_count: i64 = count_query.count().get_result(&mut conn)?;
-
-        Ok((user_list, total_count))
-    }
-
-    pub fn verified_token(&self, token_str: &str) -> Result<(), ConfigError> {
-        let mut conn = self.pool.get()?;
-
-        let now = Utc::now().naive_utc();
-
-        let target_user = users
-            .filter(verification_token.eq(Some(token_str.to_string())))
-            .filter(token_expires_at.gt(now))
-            .first::<User>(&mut conn)
-            .optional()?;
-
-        if let Some(user) = target_user {
-            diesel
-                ::update(users.filter(id.eq(user.id)))
-                .set((
-                    verified.eq(true),
-                    verification_token.eq::<Option<String>>(None),
-                    token_expires_at.eq::<Option<NaiveDateTime>>(None),
-                    updated_at.eq(now),
-                ))
-                .execute(&mut conn)?;
-            Ok(())
-        } else {
-            Err(ConfigError::NotFound)
-        }
-    }
-
-    pub fn add_verified_token(
-        &self,
-        user_id: Uuid,
-        token: String,
-        expires_at: NaiveDateTime
-    ) -> Result<(), ConfigError> {
-        let mut conn = self.pool.get()?;
-
-        diesel
-            ::update(users.filter(id.eq(user_id)))
-            .set((
-                verification_token.eq(Some(token)),
-                token_expires_at.eq(Some(expires_at)),
-                updated_at.eq(Utc::now().naive_utc()),
-            ))
-            .execute(&mut conn)?;
-
-        Ok(())
-    }
-
-    pub fn update_user_password(
-        &self,
-        user_id: Uuid,
-        new_hashed_password: String
-    ) -> Result<(), ConfigError> {
-        let mut conn = self.pool.get()?;
-
-        diesel
-            ::update(users.filter(id.eq(user_id)))
-            .set((password.eq(new_hashed_password), updated_at.eq(Utc::now().naive_utc())))
-            .execute(&mut conn)?;
-
-        Ok(())
-    }
-
     /// FOR TESTING PURPOSES
     pub fn with_pool(pool: PgPool) -> Self {
         Self {
-            database_url: "".into(),
-            jwt_secret: "".into(),
-            jwt_refresh_secret: "".into(),
-            rust_log: "".into(),
-            schema: "".into(),
-            jwt_expires_in: 0,
-            jwt_refresh_expires_in: 0,
+            database_url: "test".into(),
+            jwt_secret: "test_secret".into(),
+            jwt_refresh_secret: "test_refresh_secret".into(),
+            rust_log: "debug".into(),
+            schema: "test_schema".into(),
+            jwt_expires_in: 3600,
+            jwt_refresh_expires_in: 900,
             pool,
+            redis_url: "redis://127.0.0.1:6379".into(),
+            port: 8080,
+            rate_limit_requests_per_minute: 60,
+            smtp_server: "localhost".into(),
+            smtp_port: 587,
+            smtp_username: "test".into(),
+            smtp_password: "test".into(),
+            smtp_from_address: "test@test.com".into(),
+            aws_s3_bucket_name: "test-bucket".into(),
+            aws_s3_key: "test-key".into(),
+            aws_s3_secret: "test-secret".into(),
+            aws_region: "us-east-1".into(),
         }
     }
 }
