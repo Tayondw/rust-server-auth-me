@@ -1,4 +1,4 @@
-use chrono::{ DateTime, Utc };
+use chrono::NaiveDateTime;
 use serde::{ Deserialize, Serialize };
 use core::str;
 use regex::Regex;
@@ -6,7 +6,7 @@ use validator::{ Validate, ValidationError };
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
-use crate::models::{ User, UserRole };
+use crate::{ models::{ User, UserRole} };
 
 #[derive(Validate, Debug, Default, Clone, Serialize, Deserialize)]
 pub struct CreateUserRequest {
@@ -76,14 +76,24 @@ fn validate_terms_acceptance(terms: &bool) -> Result<(), ValidationError> {
     if *terms { Ok(()) } else { Err(ValidationError::new("Terms must be accepted")) }
 }
 
+// #[derive(Debug)]
+// pub enum UserQuery<'a> {
+//     Id(Uuid),
+//     Email(&'a str),
+//     Name(&'a str),
+//     Username(&'a str),
+//     Token(&'a str),
+//     Role(&'a str),
+// }
+
 #[derive(Debug)]
-pub enum UserQuery<'a> {
+pub enum UserQuery {
     Id(Uuid),
-    Email(&'a str),
-    Name(&'a str),
-    Username(&'a str),
-    Token(&'a str),
-    Role(&'a str)
+    Email(String), // Changed from &str to String
+    Name(String),  // Changed from &str to String
+    Username(String), // Changed from &str to String
+    Token(String), // Changed from &str to String
+    Role(UserRole), // Changed from &str to UserRole
 }
 
 #[derive(Serialize, Deserialize, Validate)]
@@ -104,9 +114,9 @@ pub struct FilterUser {
     pub verified: bool,
     pub role: String,
     #[serde(rename = "createdAt")]
-    pub created_at: DateTime<Utc>,
+    pub created_at: NaiveDateTime,
     #[serde(rename = "updatedAt")]
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: NaiveDateTime,
 }
 
 impl FilterUser {
@@ -130,7 +140,7 @@ impl FilterUser {
 
 #[derive(Serialize, Deserialize, Validate)]
 pub struct UserSearchQuery {
-    #[validate(range(min = 1))]
+    #[validate(range(min = 1, max = 100))]
     pub page: Option<usize>,
 
     #[validate(range(min = 1, max = 50))]
@@ -165,16 +175,49 @@ pub struct SingleUserResponse {
     pub data: UserData,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Validate, Debug)]
 pub struct UpdateUserRequest {
+    #[serde(default)]
+    #[validate(length(min = 1, max = 100))]
+    pub name: Option<String>,
     #[serde(default)] // This makes the field optional in JSON
     pub email: Option<String>,
-    #[serde(default)]
-    pub name: Option<String>,
     #[serde(default)]
     pub username: Option<String>,
     #[serde(default)]
     pub password: Option<String>,
+    #[serde(default)]
+    pub verified: Option<bool>,
+    #[serde(default)]
+    pub role: Option<UserRole>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UserStatistics {
+    pub total_users: usize,
+    pub verified_users: usize,
+    pub unverified_users: usize,
+    pub admin_users: usize,
+    pub moderator_users: usize,
+    pub regular_users: usize,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AdvancedUserFilters {
+    pub search_term: Option<String>,
+    pub roles: Option<Vec<UserRole>>,
+    pub verified: Option<bool>,
+    pub created_after: Option<NaiveDateTime>,
+    pub created_before: Option<NaiveDateTime>,
+    pub sort_by: Option<UserSortBy>,
+    pub sort_desc: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub enum UserSortBy {
+    CreatedAt,
+    Name,
+    Email,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -188,4 +231,62 @@ fn validate_user_role(role: &UserRole) -> Result<(), validator::ValidationError>
         UserRole::Admin | UserRole::User => Ok(()),
         _ => Err(validator::ValidationError::new("invalid_role")),
     }
+}
+
+// Request/Response structs
+#[derive(Debug, Serialize)]
+pub struct UserStatisticsResponse {
+    pub status: String,
+    pub data: UserStatistics,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct AdvancedSearchQuery {
+    #[validate(range(min = 1, max = 100))]
+    pub page: Option<usize>,
+
+    #[validate(range(min = 1, max = 50))]
+    pub limit: Option<usize>,
+
+    #[validate(length(min = 1, max = 100))]
+    pub search_term: Option<String>,
+
+    pub roles: Option<Vec<UserRole>>,
+    pub verified: Option<bool>,
+    pub created_after: Option<chrono::NaiveDateTime>,
+    pub created_before: Option<chrono::NaiveDateTime>,
+    pub sort_by: Option<UserSortBy>,
+    pub sort_desc: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct BulkRoleUpdateRequest {
+    #[validate(length(min = 1, max = 1000))]
+    pub user_ids: Vec<Uuid>,
+    pub new_role: UserRole,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CleanupResponse {
+    pub status: String,
+    pub cleaned_count: usize,
+    pub message: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CacheStatisticsResponse {
+    pub status: String,
+    pub message: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CacheInvalidationRequest {
+    pub pattern: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CacheInvalidationResponse {
+    pub status: String,
+    pub invalidated_count: usize,
+    pub message: String,
 }
