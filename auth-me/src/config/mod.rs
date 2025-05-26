@@ -1,20 +1,26 @@
 // pub mod aws;
 pub mod database;
+pub mod cache;
+pub mod logging;
 
 // use aws::AwsConfig;
-pub use database::{ DatabaseConfig, ConfigError };
+pub use database::{ DatabaseConfig, ConfigError};
+use cache::CacheConfig;
 
 #[derive(Debug, Clone)]
 pub struct Config {
 //     pub aws: AwsConfig,
     pub database: DatabaseConfig,
+    pub cache: CacheConfig,
 }
 
 impl Config {
     pub async fn new() -> Result<Self, ConfigError> {
+       let database_config = DatabaseConfig::new()?;
+        let cache_config = CacheConfig::new(&database_config.redis_url)?;
         Ok(Self {
-            // aws: AwsConfig::new().await,
-            database: DatabaseConfig::new()?, // Handle the Result properly
+            database: database_config,
+            cache: cache_config,
         })
     }
 }
