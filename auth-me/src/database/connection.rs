@@ -9,7 +9,7 @@ pub trait DbConnExt {
 
 impl DbConnExt for Arc<AppState> {
     fn conn(&self) -> Result<PooledConnection<ConnectionManager<PgConnection>>, HttpError> {
-        self.db_pool
+        self.config.database.pool
             .get()
             .map_err(|_| { HttpError::server_error(ErrorMessage::DatabaseError.to_string()) })
     }
