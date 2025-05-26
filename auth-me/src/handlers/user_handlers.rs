@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use axum::{ extract::{ State, Path, Query }, Json, http::StatusCode };
 use diesel::{
-    prelude::*,
     r2d2::{ PooledConnection, ConnectionManager },
     PgConnection,
     result::Error,
@@ -14,7 +13,6 @@ use validator::Validate;
 use crate::{
     models::User,
     config::ConfigError,
-    schema::users::{ self },
     AppState,
     database::DbConnExt,
     operations::user_operations::{ create_user, update_user, delete_user },
