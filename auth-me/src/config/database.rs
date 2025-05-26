@@ -148,10 +148,6 @@ impl DatabaseConfig {
                 })?,
         };
 
-        //   env_logger::Builder
-        //       ::from_env(env_logger::Env::default().default_filter_or(&raw.rust_log))
-        //       .init();
-
         DatabaseConfig::from_raw(raw).map_err(|e| {
             ConfigError::Config(format!("Database pool creation failed: {}", e))
         })

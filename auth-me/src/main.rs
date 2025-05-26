@@ -17,7 +17,7 @@ use axum::{ extract::Extension, middleware::from_fn, Router };
 use diesel::{ prelude::*, r2d2::{ ConnectionManager, Pool } };
 use config::Config;
 use dotenvy::dotenv;
-use routes:: create_router;
+use routes::create_router;
 use tower_http::{ cors::CorsLayer, trace::TraceLayer };
 use middleware::{
     csrf::{ csrf_middleware, TokenStore },
@@ -39,7 +39,10 @@ pub struct AppState {
 #[tokio::main]
 async fn main() -> Result<(), HttpError> {
     dotenv().ok();
-    env_logger::init();
+
+    // Initialize logger first
+    let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(&rust_log)).init();
 
     // Load configuration
     let config = Config::new().await.map_err(|e| {
