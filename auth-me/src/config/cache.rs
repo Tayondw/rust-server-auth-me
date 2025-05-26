@@ -1,18 +1,18 @@
 use redis::{ Client, Connection };
-use std::time::Duration;
+use super::ConfigError;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CacheConfig {
     client: Client,
 }
 
 impl CacheConfig {
-    pub fn new(redis_url: &str) -> Result<Self, redis::RedisError> {
+    pub fn new(redis_url: &str) -> Result<Self, ConfigError> {
         let client = Client::open(redis_url)?;
         Ok(Self { client })
     }
 
-    pub async fn get_connection(&self) -> Result<Connection, redis::RedisError> {
-        self.client.get_connection()
+    pub async fn get_connection(&self) -> Result<Connection, ConfigError> {
+        Ok(self.client.get_connection()?)
     }
 }
