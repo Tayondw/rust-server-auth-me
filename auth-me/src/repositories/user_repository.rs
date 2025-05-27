@@ -31,7 +31,10 @@ impl UserRepository {
             UserQuery::Username(username_str) =>
                 users.filter(username.eq(&username_str)).first::<User>(&mut conn).optional()?,
             UserQuery::Token(token_str) =>
-                users.filter(verification_token.eq(Some(token_str))).first::<User>(&mut conn).optional()?,
+                users
+                    .filter(verification_token.eq(Some(token_str)))
+                    .first::<User>(&mut conn)
+                    .optional()?,
             UserQuery::Role(role_enum) =>
                 users.filter(role.eq(role_enum)).first::<User>(&mut conn).optional()?,
         };
@@ -170,17 +173,16 @@ impl UserRepository {
 
     /// Update a user with partial data
     pub fn update_user(
-        pool: &PgPool,
+        conn: &mut PgConnection,
         user_id: Uuid,
         update_data: UpdateUserRequest
     ) -> Result<User, ConfigError> {
-        let mut conn = pool.get()?;
         let now = Utc::now().naive_utc();
 
         // First get the current user to fill in missing fields
         let current_user = users
             .filter(id.eq(user_id))
-            .first::<User>(&mut conn)
+            .first::<User>(conn)
             .optional()?
             .ok_or(ConfigError::NotFound)?;
 
@@ -190,11 +192,13 @@ impl UserRepository {
             .set((
                 name.eq(update_data.name.unwrap_or(current_user.name)),
                 email.eq(update_data.email.unwrap_or(current_user.email)),
+                username.eq(update_data.username.unwrap_or(current_user.username)),
+                password.eq(update_data.password.unwrap_or(current_user.password)),
                 role.eq(update_data.role.unwrap_or(current_user.role)),
                 verified.eq(update_data.verified.unwrap_or(current_user.verified)),
-                updated_at.eq(now),
+                updated_at.eq(update_data.updated_at.unwrap_or(now)),
             ))
-            .get_result(&mut conn)?;
+            .get_result(conn)?;
 
         Ok(result)
     }
@@ -291,7 +295,7 @@ impl UserRepository {
         Ok(updated_count)
     }
 
-     /// Get users by role with pagination
+    /// Get users by role with pagination
     pub fn get_users_by_role_paginated(
         pool: &PgPool,
         user_role: UserRole,
