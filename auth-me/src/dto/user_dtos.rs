@@ -6,7 +6,7 @@ use validator::{ Validate, ValidationError };
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
-use crate::{ models::{ User, UserRole} };
+use crate::{ models::{ User, UserRole } };
 
 #[derive(Validate, Debug, Clone, Serialize, Deserialize)]
 pub struct CreateUserRequest {
@@ -92,7 +92,7 @@ fn validate_terms_acceptance(terms: &bool) -> Result<(), ValidationError> {
 pub enum UserQuery {
     Id(Uuid),
     Email(String), // Changed from &str to String
-    Name(String),  // Changed from &str to String
+    Name(String), // Changed from &str to String
     Username(String), // Changed from &str to String
     Token(String), // Changed from &str to String
     Role(UserRole), // Changed from &str to UserRole
@@ -196,7 +196,7 @@ pub struct UpdateUserRequest {
     pub updated_at: Option<NaiveDateTime>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UserStatistics {
     pub total_users: usize,
     pub verified_users: usize,
@@ -238,7 +238,7 @@ fn validate_user_role(role: &UserRole) -> Result<(), validator::ValidationError>
 }
 
 // Request/Response structs
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UserStatisticsResponse {
     pub status: String,
     pub data: UserStatistics,
@@ -268,6 +268,13 @@ pub struct BulkRoleUpdateRequest {
     #[validate(length(min = 1, max = 1000))]
     pub user_ids: Vec<Uuid>,
     pub new_role: UserRole,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BulkOperationResponse {
+    pub status: String,
+    pub affected_count: usize,
+    pub message: String,
 }
 
 #[derive(Debug, Serialize)]
