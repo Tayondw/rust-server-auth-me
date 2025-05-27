@@ -976,3 +976,150 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 
 //     Ok(updated_user)
 // }
+
+// ----------------------------- USER HANDLERS --------------------------
+pub async fn get_users(
+    Query(query_params): Query<RequestQuery>,
+    State(state): State<Arc<AppState>>
+) -> Result<Json<UserListResponse>, HttpError> {
+    // Validate input
+    query_params
+        .validate()
+        .map_err(|e| HttpError::bad_request(format!("Validation error: {}", e)))?;
+
+    let page = query_params.page.unwrap_or(1);
+    let limit = query_params.limit.unwrap_or(10);
+
+    // Generate cache key for pagination
+    let cache_service = CacheService::new(state.config.cache.clone());
+    let cache_key = format!("users_paginated:{}:{}", page, limit);
+
+    // Try to get from cache first
+    if let Some(cached_response) = cache_service.get::<UserListResponse>(&cache_key).await {
+        return Ok(Json(cached_response));
+    }
+
+    // If not in cache, get from database using repository
+    let (users, total_count) = UserRepository::get_users_paginated(
+        &state.config.database.pool,
+        page,
+        limit
+    ).map_err(|e| HttpError::server_error(e.to_string()))?;
+
+    let total_pages = (((total_count as usize) + limit - 1) / limit).max(1);
+
+    // Return filtered response (no raw models exposed)
+    let response = UserListResponse {
+        status: "success".to_string(),
+        users: FilterUser::filter_users(&users), // This filters out sensitive data
+        results: total_count as usize,
+        page,
+        limit,
+        total_pages,
+    };
+
+    // Cache the response
+    cache_service.set(&cache_key, &response, USER_LIST_CACHE_TTL).await;
+
+    Ok(Json(response))
+}
+
+pub async fn get_user_by_id(
+    State(state): State<Arc<AppState>>,
+    Path(user_id): Path<Uuid>
+) -> Result<Json<SingleUserResponse>, HttpError> {
+    let cache_service = CacheService::new(state.config.cache.clone());
+    let cache_key = format!("user:{}", user_id);
+
+    // Try to get from cache first
+    if let Some(cached_response) = cache_service.get::<SingleUserResponse>(&cache_key).await {
+        return Ok(Json(cached_response));
+    }
+
+    // If not in cache, get from database using repository
+    let user = UserRepository::get_user(&state.config.database.pool, UserQuery::Id(user_id))
+        .map_err(|e| {
+            match e {
+                ConfigError::NotFound =>
+                    HttpError::new(
+                        ErrorMessage::UserNoLongerExists.to_string(),
+                        StatusCode::NOT_FOUND
+                    ),
+                _ => HttpError::server_error(e.to_string()),
+            }
+        })?
+        .ok_or_else(|| {
+            HttpError::new(ErrorMessage::UserNoLongerExists.to_string(), StatusCode::NOT_FOUND)
+        })?;
+
+    // Create response
+    let response = SingleUserResponse {
+        status: "success".to_string(),
+        data: UserData {
+            user: FilterUser::filter_user(&user),
+        },
+    };
+
+    // Cache the response
+    cache_service.set(&cache_key, &response, USER_CACHE_TTL).await;
+
+    Ok(Json(response))
+}
+
+pub async fn search_users(
+    Query(query_params): Query<UserSearchQuery>,
+    State(state): State<Arc<AppState>>
+) -> Result<Json<UserListResponse>, HttpError> {
+    query_params
+        .validate()
+        .map_err(|e| HttpError::bad_request(format!("Validation error: {}", e)))?;
+
+    let page = query_params.page.unwrap_or(1);
+    let limit = query_params.limit.unwrap_or(10);
+
+    // Generate cache key for search
+    let cache_service = CacheService::new(state.config.cache.clone());
+    let cache_key = format!(
+        "users_search:{}:{}:{}:{}:{}",
+        page,
+        limit,
+        query_params.search.as_deref().unwrap_or(""),
+        query_params.role
+            .as_ref()
+            .map(|r| format!("{:?}", r))
+            .unwrap_or_default(),
+        query_params.verified.map(|v| v.to_string()).unwrap_or_default()
+    );
+
+    // Try to get from cache first
+    if let Some(cached_response) = cache_service.get::<UserListResponse>(&cache_key).await {
+        return Ok(Json(cached_response));
+    }
+
+    // If not in cache, search in database using repository
+    let (users, total_count) = UserRepository::search_users(
+        &state.config.database.pool,
+        page,
+        limit,
+        query_params.search.as_deref(),
+        query_params.role,
+        query_params.verified
+    ).map_err(|e| HttpError::server_error(e.to_string()))?;
+
+    let total_pages = (((total_count as usize) + limit - 1) / limit).max(1);
+
+    // Create response
+    let response = UserListResponse {
+        status: "success".to_string(),
+        users: FilterUser::filter_users(&users),
+        results: total_count as usize,
+        page,
+        limit,
+        total_pages,
+    };
+
+    // Cache the response (shorter TTL for search results)
+    cache_service.set(&cache_key, &response, 30).await; // 30 seconds
+
+    Ok(Json(response))
+}
