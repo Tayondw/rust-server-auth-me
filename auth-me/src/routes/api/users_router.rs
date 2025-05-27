@@ -30,8 +30,8 @@ pub fn user_routes() -> Router<Arc<AppState>> {
 
 pub fn manager_routes() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/api/reports", get(get_reports))
-        .route("/api/users", get(list_users))
+        .route("/api/manager/reports", get(get_reports))
+        .route("/api/manager/users", get(list_users))
         .route_layer(middleware::from_fn(require_roles(vec![UserRole::Manager, UserRole::Admin])))
         .layer(middleware::from_fn(auth_middleware))
 }
