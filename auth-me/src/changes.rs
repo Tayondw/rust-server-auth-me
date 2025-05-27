@@ -945,3 +945,34 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
         //       port: 0,
         //       rate_limit_requests_per_minute: 0,
         //   }
+
+        // UPDATE USER
+// pub fn update_user(
+//     conn: &mut PgConnection,
+//     user_id: Uuid,
+//     name: String,
+//     email: String,
+//     username: String,
+//     password: String,
+//     verified: bool,
+//     role: UserRole,
+//     updated_at: NaiveDateTime
+// ) -> Result<User, Box<dyn std::error::Error>> {
+//     let update_user: UpdateUser = UpdateUser {
+//         email,
+//         name,
+//         username,
+//         password,
+//         verified,
+//         role,
+//         updated_at
+//     };
+
+//     let updated_user: User = diesel
+//         ::update(users::table)
+//         .filter(users::id.eq(user_id))
+//         .set(&update_user)
+//         .get_result(conn)?;
+
+//     Ok(updated_user)
+// }
