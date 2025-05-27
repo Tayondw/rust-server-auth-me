@@ -7,25 +7,9 @@ use serde_json::{ json, Value };
 use validator::Validate;
 
 use crate::{
-    models::User,
-    config::ConfigError,
-    AppState,
-    database::DbConnExt,
-    operations::user_operations::{ create_user, update_user, delete_user },
-    errors::{ HttpError, ErrorMessage },
-    dto::user_dtos::{
-        CreateUserRequest,
-        UpdateUserRequest,
-        RequestQuery,
-        UserListResponse,
-        FilterUser,
-        UserSearchQuery,
-        UserData,
-        SingleUserResponse,
-        UserQuery,
-    },
-    repositories::user_repository::UserRepository,
-    services::cache_services::CacheService,
+    config::ConfigError, database::DbConnExt, dto::user_dtos::{
+        CreateUserRequest, FilterUser, RequestQuery, SingleUserResponse, UpdateUserRequest, UserData, UserListResponse, UserQuery, UserSearchQuery
+    }, errors::{ ErrorMessage, HttpError }, models::User, operations::user_operations::{ create_user, delete_user }, repositories::user_repository::UserRepository, services::cache_services::CacheService, AppState
 };
 
 const USER_CACHE_TTL: u64 = 300; // 5 minutes
@@ -207,11 +191,13 @@ pub async fn create_user_handler(
 
     create_user(
         &mut conn,
-        user_data.email,
         user_data.name,
+        user_data.email,
         user_data.username,
         user_data.password,
-        user_data.verified
+        user_data.verified,
+        user_data.token_expires_at,
+        user_data.role
     )
         .map(Json)
         .map_err(|e| {
@@ -231,16 +217,9 @@ pub async fn update_user_handler(
 ) -> Result<Json<User>, HttpError> {
     let mut conn: PooledConnection<ConnectionManager<PgConnection>> = state.conn()?;
 
-    update_user(
-        &mut conn,
-        user_id,
-        update_data.email,
-        update_data.name,
-        update_data.username,
-        update_data.password
-    )
+    UserRepository::update_user(&mut conn, user_id, update_data)
         .map(Json)
-        .map_err(|_| { HttpError::server_error(ErrorMessage::UserUpdateError.to_string()) })
+        .map_err(|_| HttpError::server_error(ErrorMessage::UserUpdateError.to_string()))
 }
 
 // DELETE USER BY ID
@@ -263,7 +242,7 @@ pub async fn delete_user_handler(
     }
 }
 
-pub async fn list_users(State(state): State<Arc<AppState>>) -> Result<Json<Value>, HttpError> {
+pub async fn list_users(State(_state): State<Arc<AppState>>) -> Result<Json<Value>, HttpError> {
     // Basic user list for managers - limited info
     let users =
         json!({
@@ -287,7 +266,7 @@ pub async fn list_users(State(state): State<Arc<AppState>>) -> Result<Json<Value
     Ok(Json(users))
 }
 
-pub async fn list_all_users(State(state): State<Arc<AppState>>) -> Result<Json<Value>, HttpError> {
+pub async fn list_all_users(State(_state): State<Arc<AppState>>) -> Result<Json<Value>, HttpError> {
     // Full user list for admins - includes sensitive info
     let users =
         json!({
