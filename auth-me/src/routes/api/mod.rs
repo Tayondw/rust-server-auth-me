@@ -12,7 +12,7 @@ use users_router::users_handler;
 
 /// Main API router assembly function
 pub fn setup_complete_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
-    let auth_service = Arc::new(AuthService::new(&state.config, state.db_pool.clone()));
+    let auth_service = Arc::new(AuthService::new(&state.config, state.config.database.pool.clone()));
 
     Router::new()
         // Auth routes
