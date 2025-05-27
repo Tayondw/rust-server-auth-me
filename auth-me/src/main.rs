@@ -10,12 +10,14 @@ mod utils;
 mod operations;
 mod handlers;
 mod routes;
+mod repositories;
+mod services;
 
 use std::{ net::SocketAddr, sync::Arc };
 
 use axum::{ extract::Extension, middleware::from_fn, Router };
-use diesel::{ prelude::*, r2d2::{ ConnectionManager, Pool } };
-use config::Config;
+// use diesel::{ prelude::*, r2d2::{ ConnectionManager, Pool } };
+use config::{ Config, logging::init_logging };
 use dotenvy::dotenv;
 use routes::create_router;
 use tower_http::{ cors::CorsLayer, trace::TraceLayer };
@@ -32,7 +34,6 @@ use tokio::net::TcpListener;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub db_pool: Pool<ConnectionManager<PgConnection>>,
     pub config: Config,
 }
 
@@ -41,23 +42,25 @@ async fn main() -> Result<(), HttpError> {
     dotenv().ok();
 
     // Initialize logger first
-    let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(&rust_log)).init();
+    //     let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+    //     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(&rust_log)).init();
+
+    init_logging();
 
     // Load configuration
     let config = Config::new().await.map_err(|e| {
         HttpError::server_error(format!("Failed to load configuration: {}", e))
     })?;
 
-    // Set up database connection pool
-    let manager: ConnectionManager<PgConnection> = ConnectionManager::<PgConnection>::new(
-        &config.database.database_url
-    );
-    let pool: Pool<ConnectionManager<PgConnection>> = Pool::builder()
-        .build(manager)
-        .map_err(|e| HttpError::server_error(format!("Failed to create pool: {}", e)))?;
+//     // Set up database connection pool
+//     let manager: ConnectionManager<PgConnection> = ConnectionManager::<PgConnection>::new(
+//         &config.database.database_url
+//     );
+//     let pool: Pool<ConnectionManager<PgConnection>> = Pool::builder()
+//         .build(manager)
+//         .map_err(|e| HttpError::server_error(format!("Failed to create pool: {}", e)))?;
 
-    let shared_state: Arc<AppState> = Arc::new(AppState { db_pool: pool, config: config.clone() });
+    let shared_state: Arc<AppState> = Arc::new(AppState { config: config.clone() });
 
     // Initialize tracing subscriber
     tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).try_init().ok();
