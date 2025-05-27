@@ -2,7 +2,7 @@ use diesel::prelude::*;
 use uuid::Uuid;
 use chrono::NaiveDateTime;
 
-use crate::{ models::{ NewUser, UpdateUser, User, UserRole }, schema::users::{ self } };
+use crate::{ models::{ NewUser, User, UserRole }, schema::users::{ self } };
 
 // CREATE USER
 pub fn create_user(
@@ -25,43 +25,12 @@ pub fn create_user(
         verified,
         verification_token: token,
         token_expires_at,
-        role
+        role,
     };
 
     let user: User = diesel::insert_into(users::table).values(&new_user).get_result(conn)?;
 
     Ok(user)
-}
-
-// UPDATE USER
-pub fn update_user(
-    conn: &mut PgConnection,
-    user_id: Uuid,
-    name: String,
-    email: String,
-    username: String,
-    password: String,
-    verified: bool,
-    role: UserRole,
-    updated_at: NaiveDateTime
-) -> Result<User, Box<dyn std::error::Error>> {
-    let update_user: UpdateUser = UpdateUser {
-        email,
-        name,
-        username,
-        password,
-        verified,
-        role,
-        updated_at
-    };
-
-    let updated_user: User = diesel
-        ::update(users::table)
-        .filter(users::id.eq(user_id))
-        .set(&update_user)
-        .get_result(conn)?;
-
-    Ok(updated_user)
 }
 
 // DELETE USER
