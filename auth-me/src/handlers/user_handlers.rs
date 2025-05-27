@@ -179,7 +179,7 @@ pub async fn invalidate_user_cache(cache_service: &CacheService, user_id: Option
     // 2. Maintaining a set of active cache keys
     // 3. Using cache tags/groups
     // 
-    // For now, you could clear all user list caches or implement a time-based expiration
+    // For now, could clear all user list caches or implement a time-based expiration
 }
 
 // CREATE NEW USER
