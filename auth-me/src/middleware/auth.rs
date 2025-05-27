@@ -13,6 +13,7 @@ use crate::{
     models::{ User, UserRole },
     utils::token::AuthService,
     config::{ DatabaseConfig, ConfigError },
+    repositories::user_repository::UserRepository,
 };
 
 /// Struct to hold user ID
@@ -40,10 +41,10 @@ pub async fn auth_middleware(
     // Extract token from cookies or Authorization header
     let token: String = extract_token(&request)?;
 
-     // Decode token to get user ID using your existing function
-    let user_id: String = auth_service.extract_user_id_from_token(&token, false).map_err(
-        |_| StatusCode::UNAUTHORIZED
-    )?;
+    // Decode token to get user ID using your existing function
+    let user_id: String = auth_service
+        .extract_user_id_from_token(&token, false)
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
     // Add the user ID to request extensions
     request.extensions_mut().insert(AuthUser { user_id });
@@ -83,7 +84,7 @@ pub async fn role_check_middleware(
 
 // Helper function to get user from database
 async fn get_user_from_db(
-    database_config: &DatabaseConfig,
+    database_config: &Arc<DatabaseConfig>,
     user_id: &str
 ) -> Result<Option<User>, ConfigError> {
     use crate::dto::user_dtos::UserQuery;
@@ -93,7 +94,11 @@ async fn get_user_from_db(
         ::parse_str(user_id)
         .map_err(|_| ConfigError::Config("Invalid user ID format".to_string()))?;
 
-    database_config.get_user(UserQuery::Id(user_uuid))
+    // Get the database pool from your DatabaseConfig
+    let pool = &database_config.pool;
+
+    // Use the associated function syntax for UserRepository::get_user
+    UserRepository::get_user(pool, UserQuery::Id(user_uuid))
 }
 
 fn extract_token(request: &Request) -> Result<String, StatusCode> {
