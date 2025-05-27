@@ -7,9 +7,25 @@ use serde_json::{ json, Value };
 use validator::Validate;
 
 use crate::{
-    config::ConfigError, database::DbConnExt, dto::user_dtos::{
-        CreateUserRequest, FilterUser, RequestQuery, SingleUserResponse, UpdateUserRequest, UserData, UserListResponse, UserQuery, UserSearchQuery
-    }, errors::{ ErrorMessage, HttpError }, models::User, operations::user_operations::{ create_user, delete_user }, repositories::user_repository::UserRepository, services::cache_services::CacheService, AppState
+    config::ConfigError,
+    database::DbConnExt,
+    dto::user_dtos::{
+        CreateUserRequest,
+        FilterUser,
+        RequestQuery,
+        SingleUserResponse,
+        UpdateUserRequest,
+        UserData,
+        UserListResponse,
+        UserQuery,
+        UserSearchQuery,
+    },
+    errors::{ ErrorMessage, HttpError },
+    models::User,
+    operations::user_operations::{ create_user, delete_user },
+    repositories::user_repository::UserRepository,
+    services::{ cache_services::CacheService, enhanced_cache_services::EnhancedCacheService },
+    AppState,
 };
 
 const USER_CACHE_TTL: u64 = 300; // 5 minutes
@@ -21,24 +37,28 @@ pub async fn get_users(
     Query(query_params): Query<RequestQuery>,
     State(state): State<Arc<AppState>>
 ) -> Result<Json<UserListResponse>, HttpError> {
-    // Validate input
     query_params
         .validate()
         .map_err(|e| HttpError::bad_request(format!("Validation error: {}", e)))?;
 
+    // Create cache service and enhanced cache service from config
+    let cache_service = CacheService::new(state.config.cache.clone());
+    let enhanced_cache = EnhancedCacheService::new(cache_service);
+
     let page = query_params.page.unwrap_or(1);
     let limit = query_params.limit.unwrap_or(10);
-
-    // Generate cache key for pagination
-    let cache_service = CacheService::new(state.config.cache.clone());
     let cache_key = format!("users_paginated:{}:{}", page, limit);
 
-    // Try to get from cache first
-    if let Some(cached_response) = cache_service.get::<UserListResponse>(&cache_key).await {
+    // Try cache first
+    if
+        let Some(cached_response) = enhanced_cache.cache_service.get::<UserListResponse>(
+            &cache_key
+        ).await
+    {
         return Ok(Json(cached_response));
     }
 
-    // If not in cache, get from database using repository
+    // Get from database
     let (users, total_count) = UserRepository::get_users_paginated(
         &state.config.database.pool,
         page,
@@ -47,18 +67,18 @@ pub async fn get_users(
 
     let total_pages = (((total_count as usize) + limit - 1) / limit).max(1);
 
-    // Return filtered response (no raw models exposed)
     let response = UserListResponse {
         status: "success".to_string(),
-        users: FilterUser::filter_users(&users), // This filters out sensitive data
+        users: FilterUser::filter_users(&users),
         results: total_count as usize,
         page,
         limit,
         total_pages,
     };
 
-    // Cache the response
-    cache_service.set(&cache_key, &response, USER_LIST_CACHE_TTL).await;
+    // Cache with tags
+    let tags = vec!["users_list".to_string()];
+    enhanced_cache.set_with_tags(&cache_key, &response, USER_LIST_CACHE_TTL, tags).await;
 
     Ok(Json(response))
 }
@@ -68,15 +88,22 @@ pub async fn get_user_by_id(
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<Uuid>
 ) -> Result<Json<SingleUserResponse>, HttpError> {
-    let cache_service = CacheService::new(state.config.cache.clone());
     let cache_key = format!("user:{}", user_id);
 
-    // Try to get from cache first
-    if let Some(cached_response) = cache_service.get::<SingleUserResponse>(&cache_key).await {
+    // Create cache service and enhanced cache service from config
+    let cache_service = CacheService::new(state.config.cache.clone());
+    let enhanced_cache = EnhancedCacheService::new(cache_service);
+
+    // Try cache first
+    if
+        let Some(cached_response) = enhanced_cache.cache_service.get::<SingleUserResponse>(
+            &cache_key
+        ).await
+    {
         return Ok(Json(cached_response));
     }
 
-    // If not in cache, get from database using repository
+    // Get from database
     let user = UserRepository::get_user(&state.config.database.pool, UserQuery::Id(user_id))
         .map_err(|e| {
             match e {
@@ -92,7 +119,6 @@ pub async fn get_user_by_id(
             HttpError::new(ErrorMessage::UserNoLongerExists.to_string(), StatusCode::NOT_FOUND)
         })?;
 
-    // Create response
     let response = SingleUserResponse {
         status: "success".to_string(),
         data: UserData {
@@ -100,8 +126,13 @@ pub async fn get_user_by_id(
         },
     };
 
-    // Cache the response
-    cache_service.set(&cache_key, &response, USER_CACHE_TTL).await;
+    // Cache with tags including user-specific and role-specific tags
+    let tags = vec![
+        format!("user:{}", user_id),
+        format!("role:{:?}", user.role),
+        format!("verified:{}", user.verified)
+    ];
+    enhanced_cache.set_with_tags(&cache_key, &response, USER_CACHE_TTL, tags).await;
 
     Ok(Json(response))
 }
@@ -118,8 +149,10 @@ pub async fn search_users(
     let page = query_params.page.unwrap_or(1);
     let limit = query_params.limit.unwrap_or(10);
 
-    // Generate cache key for search
+    // Create cache service and enhanced cache service from config
     let cache_service = CacheService::new(state.config.cache.clone());
+    let enhanced_cache = EnhancedCacheService::new(cache_service);
+
     let cache_key = format!(
         "users_search:{}:{}:{}:{}:{}",
         page,
@@ -132,12 +165,16 @@ pub async fn search_users(
         query_params.verified.map(|v| v.to_string()).unwrap_or_default()
     );
 
-    // Try to get from cache first
-    if let Some(cached_response) = cache_service.get::<UserListResponse>(&cache_key).await {
+    // Try cache first
+    if
+        let Some(cached_response) = enhanced_cache.cache_service.get::<UserListResponse>(
+            &cache_key
+        ).await
+    {
         return Ok(Json(cached_response));
     }
 
-    // If not in cache, search in database using repository
+    // Get from database
     let (users, total_count) = UserRepository::search_users(
         &state.config.database.pool,
         page,
@@ -149,7 +186,6 @@ pub async fn search_users(
 
     let total_pages = (((total_count as usize) + limit - 1) / limit).max(1);
 
-    // Create response
     let response = UserListResponse {
         status: "success".to_string(),
         users: FilterUser::filter_users(&users),
@@ -159,27 +195,18 @@ pub async fn search_users(
         total_pages,
     };
 
-    // Cache the response (shorter TTL for search results)
-    cache_service.set(&cache_key, &response, 30).await; // 30 seconds
-
-    Ok(Json(response))
-}
-
-/// Helper function to invalidate user-related cache entries
-pub async fn invalidate_user_cache(cache_service: &CacheService, user_id: Option<Uuid>) {
-    // Invalidate specific user cache if user_id is provided
-    if let Some(id) = user_id {
-        let user_cache_key = format!("user:{}", id);
-        cache_service.delete(&user_cache_key).await;
+    // Cache with comprehensive tags
+    let mut tags = vec!["users_search".to_string()];
+    if let Some(role) = query_params.role {
+        tags.push(format!("role:{:?}", role));
+    }
+    if let Some(verified) = query_params.verified {
+        tags.push(format!("verified:{}", verified));
     }
 
-    // Note: For paginated results and search results, I will implement
-    // a more sophisticated cache invalidation strategy, such as:
-    // 1. Using cache keys with wildcards (if Redis supports it)
-    // 2. Maintaining a set of active cache keys
-    // 3. Using cache tags/groups
-    // 
-    // For now, could clear all user list caches or implement a time-based expiration
+    enhanced_cache.set_with_tags(&cache_key, &response, SEARCH_CACHE_TTL, tags).await;
+
+    Ok(Json(response))
 }
 
 // CREATE NEW USER
@@ -209,7 +236,7 @@ pub async fn create_user_handler(
         })
 }
 
-// UPDATE USER BY ID
+/// UPDATE USER BY ID
 pub async fn update_user_handler(
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<Uuid>,
@@ -220,6 +247,53 @@ pub async fn update_user_handler(
     UserRepository::update_user(&mut conn, user_id, update_data)
         .map(Json)
         .map_err(|_| HttpError::server_error(ErrorMessage::UserUpdateError.to_string()))
+}
+
+/// UPDATE USER WITH CACHE INVALIDATION
+pub async fn update_user(
+    State(state): State<Arc<AppState>>,
+    Path(user_id): Path<Uuid>,
+    Json(update_data): Json<UpdateUserRequest>
+) -> Result<Json<SingleUserResponse>, HttpError> {
+    // Get a connection from the pool
+    let mut conn = state.conn()?;
+
+    // Get the current user for cache invalidation comparison
+    let old_user = UserRepository::get_user(&state.config.database.pool, UserQuery::Id(user_id))
+        .map_err(|e| HttpError::server_error(e.to_string()))?
+        .ok_or_else(||
+            HttpError::new(ErrorMessage::UserNoLongerExists.to_string(), StatusCode::NOT_FOUND)
+        )?;
+
+    // Perform the update
+    let updated_user = UserRepository::update_user(&mut conn, user_id, update_data).map_err(|e|
+        HttpError::server_error(e.to_string())
+    )?;
+
+    // Create cache service and enhanced cache service from config
+    let cache_service = CacheService::new(state.config.cache.clone());
+    let enhanced_cache = EnhancedCacheService::new(cache_service);
+
+    // Invalidate cache based on what changed
+    if
+        let Err(e) = enhanced_cache.invalidate_for_user_update(
+            user_id,
+            Some(&old_user),
+            Some(&updated_user)
+        ).await
+    {
+        // Log the error but don't fail the request
+        tracing::warn!("Failed to invalidate cache after user update: {}", e);
+    }
+
+    let response = SingleUserResponse {
+        status: "success".to_string(),
+        data: UserData {
+            user: FilterUser::filter_user(&updated_user),
+        },
+    };
+
+    Ok(Json(response))
 }
 
 // DELETE USER BY ID
@@ -240,6 +314,44 @@ pub async fn delete_user_handler(
             Err(HttpError::server_error(ErrorMessage::DeleteUserError.to_string()))
         }
     }
+}
+
+/// DELETE USER WITH CACHE INVALIDATION
+pub async fn delete_user_cache_handler(
+    State(state): State<Arc<AppState>>,
+    Path(user_id): Path<Uuid>
+) -> Result<StatusCode, HttpError> {
+    // Get the user before deletion for cache invalidation
+    let user_to_delete = UserRepository::get_user(
+        &state.config.database.pool,
+        UserQuery::Id(user_id)
+    )
+        .map_err(|e| HttpError::server_error(e.to_string()))?
+        .ok_or_else(||
+            HttpError::new(ErrorMessage::UserNoLongerExists.to_string(), StatusCode::NOT_FOUND)
+        )?;
+
+    // Perform the deletion
+    UserRepository::delete_user(&state.config.database.pool, user_id).map_err(|e|
+        HttpError::server_error(e.to_string())
+    )?;
+
+    // Create cache service and enhanced cache service from config
+    let cache_service = CacheService::new(state.config.cache.clone());
+    let enhanced_cache = EnhancedCacheService::new(cache_service);
+
+    // Invalidate all related cache entries
+    if
+        let Err(e) = enhanced_cache.invalidate_for_user_update(
+            user_id,
+            Some(&user_to_delete),
+            None
+        ).await
+    {
+        tracing::warn!("Failed to invalidate cache after user deletion: {}", e);
+    }
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn list_users(State(_state): State<Arc<AppState>>) -> Result<Json<Value>, HttpError> {
