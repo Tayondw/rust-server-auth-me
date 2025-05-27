@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{ models::{ User, UserRole} };
 
-#[derive(Validate, Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Validate, Debug, Clone, Serialize, Deserialize)]
 pub struct CreateUserRequest {
     #[validate(
         length(min = 1, message = "Name is required"),
@@ -45,10 +45,12 @@ pub struct CreateUserRequest {
     #[serde(default)]
     pub verified: bool,
 
+    pub token_expires_at: Option<NaiveDateTime>,
+
     #[validate(custom = "validate_terms_acceptance")]
     pub terms_accepted: bool,
 
-    pub role: Option<String>,
+    pub role: UserRole,
 }
 
 // Custom password validator function
@@ -190,6 +192,8 @@ pub struct UpdateUserRequest {
     pub verified: Option<bool>,
     #[serde(default)]
     pub role: Option<UserRole>,
+    #[serde(default, rename = "updatedAt")]
+    pub updated_at: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, Serialize)]
