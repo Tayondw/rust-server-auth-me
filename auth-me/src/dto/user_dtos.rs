@@ -301,3 +301,8 @@ pub struct CacheInvalidationResponse {
     pub invalidated_count: usize,
     pub message: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct VerifyTokenRequest {
+    pub token: String,
+}
