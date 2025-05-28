@@ -17,7 +17,7 @@ pub async fn send_verification_email(
 ) -> Result<(), HttpError> {
     let subject = "Email Verification";
     let template_path = "src/email/templates/verification-email.html";
-    let base_url = "http://localhost:8080/api/auth/verify";
+    let base_url = "http://localhost:8080/auth/verify";
     let verification_link = create_verification_link(base_url, token);
     let placeholders = vec![
         ("{{username}}".to_string(), username.to_string()),
