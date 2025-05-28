@@ -32,15 +32,3 @@ pub fn create_user(
 
     Ok(user)
 }
-
-// DELETE USER
-pub async fn delete_user(
-    conn: &mut PgConnection,
-    user_id: Uuid
-) -> Result<(), diesel::result::Error> {
-    use crate::schema::users::dsl::*;
-
-    diesel::delete(users.find(user_id)).execute(conn)?;
-
-    Ok(())
-}
