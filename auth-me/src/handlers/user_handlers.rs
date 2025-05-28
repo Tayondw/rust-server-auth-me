@@ -297,7 +297,7 @@ pub async fn update_user(
 }
 
 /// DELETE USER WITH CACHE INVALIDATION
-pub async fn delete_user_cache_handler(
+pub async fn delete_user_handler(
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<Uuid>
 ) -> Result<StatusCode, HttpError> {
