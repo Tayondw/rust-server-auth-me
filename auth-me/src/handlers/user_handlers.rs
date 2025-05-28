@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::{ extract::{ State, Path, Query }, Json, http::StatusCode };
-use diesel::{ r2d2::{ PooledConnection, ConnectionManager }, PgConnection, result::Error };
+use diesel::{ r2d2::{ PooledConnection, ConnectionManager }, PgConnection };
 use uuid::Uuid;
 use serde_json::{ json, Value };
 use validator::Validate;
@@ -22,7 +22,7 @@ use crate::{
     },
     errors::{ ErrorMessage, HttpError },
     models::User,
-    operations::user_operations::{ create_user, delete_user },
+    operations::user_operations::*,
     repositories::user_repository::UserRepository,
     services::{ cache_services::CacheService, enhanced_cache_services::EnhancedCacheService },
     AppState,
@@ -294,26 +294,6 @@ pub async fn update_user(
     };
 
     Ok(Json(response))
-}
-
-// DELETE USER BY ID
-pub async fn delete_user_handler(
-    State(state): State<Arc<AppState>>,
-    Path(user_id): Path<Uuid>
-) -> Result<StatusCode, HttpError> {
-    let mut conn: PooledConnection<ConnectionManager<PgConnection>> = state.conn()?;
-
-    match delete_user(&mut conn, user_id).await {
-        Ok(_) => Ok(StatusCode::NO_CONTENT), // If successful, return No Content status
-        Err(Error::NotFound) => {
-            // If user is not found, return Not Found status with a specific message
-            Err(HttpError::not_found(ErrorMessage::UserNotFound.to_string()))
-        }
-        Err(_) => {
-            // For any other errors, return Internal Server Error with a message
-            Err(HttpError::server_error(ErrorMessage::DeleteUserError.to_string()))
-        }
-    }
 }
 
 /// DELETE USER WITH CACHE INVALIDATION
