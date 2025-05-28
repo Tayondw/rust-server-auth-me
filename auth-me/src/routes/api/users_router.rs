@@ -24,7 +24,7 @@ pub fn user_routes() -> Router<Arc<AppState>> {
             "/api/users/{id}",
             patch(update_user).get(get_user_by_id).delete(delete_user_cache_handler)
         )
-        //   .layer(middleware::from_fn(require_roles(vec![UserRole::Admin])))
+        .layer(middleware::from_fn(require_roles(vec![UserRole::Admin])))
         .layer(middleware::from_fn(auth_middleware))
 }
 
