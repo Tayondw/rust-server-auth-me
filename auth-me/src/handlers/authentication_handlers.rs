@@ -73,16 +73,17 @@ pub async fn signup_handler(
     // Wrap in a transaction
     let user_result = conn.transaction::<User, DieselError, _>(|conn| {
         // Create user with the hashed password
-        let user = create_user(
-            conn,
-            signup_data.name.clone(),
-            signup_data.email.clone(),
-            signup_data.username.clone(),
-            hashed_password,
-            signup_data.verified,
-            Some(token_expiration), // Use calculated 1-hour expiration
-            signup_data.role
-        ).map_err(|e| {
+        let user = UserRepository::create_user(conn, SignupRequest {
+            name: signup_data.name.clone(),
+            email: signup_data.email.clone(),
+            username: signup_data.username.clone(),
+            password: hashed_password,
+            password_confirm: String::new(), // Not used in creation
+            verified: signup_data.verified,
+            token_expires_at: Some(token_expiration),
+            terms_accepted: true, // Assuming they accepted during signup
+            role: signup_data.role,
+        }).map_err(|e| {
             tracing::error!("Error creating user: {}", e);
             DieselError::RollbackTransaction
         })?;
