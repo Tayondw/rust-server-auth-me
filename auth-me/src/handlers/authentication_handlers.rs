@@ -65,6 +65,9 @@ pub async fn signup_handler(
         }
     };
 
+    // Set verification token to expire in 1 hour
+    let token_expiration = chrono::Utc::now().naive_utc() + chrono::Duration::hours(1);
+
     let mut conn = state.conn()?; // PooledConnection
 
     // Wrap in a transaction
@@ -76,8 +79,8 @@ pub async fn signup_handler(
             signup_data.email.clone(),
             signup_data.username.clone(),
             hashed_password,
-            signup_data.verified.clone(),
-            signup_data.token_expires_at,
+            signup_data.verified,
+            Some(token_expiration), // Use calculated 1-hour expiration
             signup_data.role
         ).map_err(|e| {
             tracing::error!("Error creating user: {}", e);
@@ -132,7 +135,15 @@ pub async fn verify_email_handler(
     // Step 1: Validate query
     query.validate().map_err(|e| HttpError::bad_request(e.to_string()))?;
 
-    // Step 2: Use repository to verify token
+    // Step 2: Get the verified user
+    let user = UserRepository::get_user(
+        &state.config.database.pool,
+        UserQuery::Token(query.token.clone())
+    )
+        .map_err(|e| HttpError::server_error(e.to_string()))?
+        .ok_or_else(|| HttpError::not_found("User not found".to_string()))?;
+
+    // Step 3: Use repository to verify token
     UserRepository::verify_token(&state.config.database.pool, &query.token).map_err(|e| {
         match e {
             crate::config::ConfigError::NotFound =>
@@ -140,14 +151,6 @@ pub async fn verify_email_handler(
             _ => HttpError::server_error(e.to_string()),
         }
     })?;
-
-    // Step 3: Get the verified user
-    let user = UserRepository::get_user(
-        &state.config.database.pool,
-        UserQuery::Token(query.token.clone())
-    )
-        .map_err(|e| HttpError::server_error(e.to_string()))?
-        .ok_or_else(|| HttpError::not_found("User not found".to_string()))?;
 
     // Step 4: Send welcome email
     if let Err(e) = send_welcome_email(&user.email, &user.name).await {
