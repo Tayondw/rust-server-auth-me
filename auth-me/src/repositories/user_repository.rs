@@ -4,13 +4,14 @@ use chrono::{ NaiveDateTime, Utc };
 
 use crate::{
     config::{ ConfigError, database::PgPool },
-    models::{ User, UserRole, UpdateUser },
+    models::{ User, UserRole, UpdateUser, NewUser },
     dto::user_dtos::{
         UserQuery,
         UpdateUserRequest,
         AdvancedUserFilters,
         UserSortBy,
         UserStatistics,
+        CreateUserRequest
     },
     schema::users::{ self, dsl::* },
 };
@@ -18,6 +19,30 @@ use crate::{
 pub struct UserRepository;
 
 impl UserRepository {
+    pub fn create_user(
+        conn: &mut PgConnection,
+        request: CreateUserRequest,
+    ) -> Result<User, ConfigError> {
+        let token: Option<String> = Some(Uuid::new_v4().to_string());
+
+        let new_user = NewUser {
+            name: request.name,
+            email: request.email,
+            username: request.username,
+            password: request.password,
+            verified: request.verified,
+            verification_token: token,
+            token_expires_at: request.token_expires_at,
+            role: request.role,
+        };
+
+        let user = diesel::insert_into(users::table)
+            .values(&new_user)
+            .get_result(conn)?;
+
+        Ok(user)
+    }
+
     pub fn get_user(pool: &PgPool, query: UserQuery) -> Result<Option<User>, ConfigError> {
         let mut conn = pool.get()?;
 
