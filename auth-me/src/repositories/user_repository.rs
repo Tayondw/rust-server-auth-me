@@ -5,14 +5,14 @@ use chrono::{ NaiveDateTime, Utc };
 use crate::{
     config::{ ConfigError, database::PgPool },
     models::{ User, UserRole, UpdateUser, NewUser },
-    dto::user_dtos::{
+    dto::{user_dtos::{
         UserQuery,
         UpdateUserRequest,
         AdvancedUserFilters,
         UserSortBy,
         UserStatistics,
-        CreateUserRequest
-    },
+        CreateUserRequest,
+    }, create_user::CreateUserParams},
     schema::users::{ self, dsl::* },
 };
 
@@ -21,7 +21,7 @@ pub struct UserRepository;
 impl UserRepository {
     pub fn create_user(
         conn: &mut PgConnection,
-        request: CreateUserRequest,
+        request: CreateUserRequest
     ) -> Result<User, ConfigError> {
         let token: Option<String> = Some(Uuid::new_v4().to_string());
 
@@ -36,11 +36,63 @@ impl UserRepository {
             role: request.role,
         };
 
-        let user = diesel::insert_into(users::table)
-            .values(&new_user)
-            .get_result(conn)?;
+        let user = diesel::insert_into(users::table).values(&new_user).get_result(conn)?;
 
         Ok(user)
+    }
+
+    /// Unified user creation method
+    pub fn create_user_unified(
+        conn: &mut PgConnection,
+        params: CreateUserParams
+    ) -> Result<User, ConfigError> {
+        let other_verification_token = if params.verified {
+            None // No token needed for pre-verified users
+        } else {
+            Some(Uuid::new_v4().to_string())
+        };
+
+        let new_user = NewUser {
+            name: params.name,
+            email: params.email,
+            username: params.username,
+            password: params.password,
+            verified: params.verified,
+            verification_token: other_verification_token,
+            token_expires_at: params.token_expires_at,
+            role: params.role,
+            // Add these fields to your NewUser struct if needed
+            // created_by: params.created_by,
+            // force_password_change: params.force_password_change,
+        };
+
+        let user = diesel::insert_into(users::table).values(&new_user).get_result(conn)?;
+
+        Ok(user)
+    }
+
+    /// Check if email or username already exists
+    pub fn check_user_exists(
+        pool: &PgPool,
+        email_check: &str,
+        username_check: &str
+    ) -> Result<(bool, bool), ConfigError> {
+        let mut conn = pool.get()?;
+        use crate::schema::users::dsl::*;
+
+        let email_exists = users
+            .filter(email.eq(email_check))
+            .first::<User>(&mut conn)
+            .optional()?
+            .is_some();
+
+        let username_exists = users
+            .filter(username.eq(username_check))
+            .first::<User>(&mut conn)
+            .optional()?
+            .is_some();
+
+        Ok((email_exists, username_exists))
     }
 
     pub fn get_user(pool: &PgPool, query: UserQuery) -> Result<Option<User>, ConfigError> {
