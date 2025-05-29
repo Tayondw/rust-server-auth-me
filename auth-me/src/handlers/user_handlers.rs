@@ -229,7 +229,7 @@ pub async fn create_user_handler(
         .map(Json)
         .map_err(|e| {
             if e.to_string().contains("UNIQUE constraint failed") {
-                HttpError::unique_constraint_validation(ErrorMessage::UserExists.to_string())
+                HttpError::unique_constraint_validation(ErrorMessage::UserCreationError.to_string())
             } else {
                 HttpError::server_error(ErrorMessage::UserCreationError.to_string())
             }
