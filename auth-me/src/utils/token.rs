@@ -25,8 +25,6 @@ pub enum ServiceError {
 
     #[error("Database error: {0}")] DatabaseError(#[from] diesel::result::Error),
 
-    #[error("Password hash error: {0}")] BcryptError(#[from] bcrypt::BcryptError),
-
     #[error("Connection pool error: {0}")] PoolError(#[from] diesel::r2d2::PoolError),
 
     #[error("Token error: {0}")] TokenError(#[from] jsonwebtoken::errors::Error),
