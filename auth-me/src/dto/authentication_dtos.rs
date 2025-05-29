@@ -1,14 +1,24 @@
 use serde::{ Deserialize, Serialize };
 use validator::Validate;
 
+
 use crate::dto::user_dtos::CreateUserRequest;
 
 pub type SignupRequest = CreateUserRequest;
 
-#[derive(Serialize, Deserialize)]
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum UserCreationType {
+    SelfSignup,
+    AdminCreated,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SignupResponse {
     pub message: String,
-    pub user_id: String,
+    pub user_id: uuid::Uuid,
+    pub creation_type: UserCreationType,
+    pub verification_required: bool,
 }
 
 #[derive(Validate, Debug, Default, Clone, Serialize, Deserialize)]
