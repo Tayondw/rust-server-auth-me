@@ -46,3 +46,8 @@ pub fn compare(password: &str, hashed_password: &str) -> Result<bool, ErrorMessa
 
     Ok(password_matched)
 }
+
+pub fn generate_temp_password() -> String {
+    use rand::{ Rng, distr::Alphanumeric };
+    rand::rng().sample_iter(&Alphanumeric).take(12).map(char::from).collect()
+}
