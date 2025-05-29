@@ -24,7 +24,8 @@ pub enum ErrorMessage {
     InternalServerError,
     WrongCredentials,
     EmptyPassword,
-    UserExists,
+    UsernameExists,
+    EmailExists,
     UserNotFound,
     UserNoLongerExists,
     InvalidHashFormat,
@@ -41,7 +42,7 @@ pub enum ErrorMessage {
     EmailPasswordError,
     PasswordComparison,
     VerificationTokenExpiredError,
-    VerificationTokenInvalidError
+    VerificationTokenInvalidError,
 }
 
 impl ToString for ErrorMessage {
@@ -55,6 +56,7 @@ impl ErrorMessage {
         match self {
             ErrorMessage::DatabaseError => "Error connecting to the database".to_string(),
             ErrorMessage::DeleteUserError => "Unable to delete the user".to_string(),
+            ErrorMessage::EmailExists => "User with this email already exists".to_string(),
             ErrorMessage::EmailNotFoundError => "Unable to find email".to_string(),
             ErrorMessage::EmailPasswordError => "Failed to send forgot password email".to_string(),
             ErrorMessage::EmailVerificationError => "Failed to send verification email".to_string(),
@@ -65,14 +67,14 @@ impl ErrorMessage {
             ErrorMessage::InternalServerError =>
                 "Server Error. Please try again later.".to_string(),
             ErrorMessage::InvalidFromEmailFormat => "Invalid from email format".to_string(),
-            ErrorMessage::InvalidRecipientEmailFormat => "Invalid recipient email format".to_string(),
+            ErrorMessage::InvalidRecipientEmailFormat =>
+                "Invalid recipient email format".to_string(),
             ErrorMessage::InvalidHashFormat => "Invalid password hash format".to_string(),
             ErrorMessage::InvalidToken => "Authentication token is invalid or expired".to_string(),
             ErrorMessage::NotFound => "The requested resource could not be found".to_string(),
             ErrorMessage::PermissionDenied =>
                 "You are not allowed to perform this action".to_string(),
-            ErrorMessage::PasswordComparison =>
-                "Password comparison error".to_string(),
+            ErrorMessage::PasswordComparison => "Password comparison error".to_string(),
             ErrorMessage::TokenNotProvided =>
                 "You are not logged in, please provide a token".to_string(),
             ErrorMessage::UserCreationError => "Unable to create user.".to_string(),
@@ -82,8 +84,7 @@ impl ErrorMessage {
                 "Authentication required, please log in".to_string(),
             ErrorMessage::UserNotFound =>
                 "Unable to locate user based on the id or token".to_string(),
-            ErrorMessage::UserExists =>
-                "User with this email and/ or username already exists".to_string(),
+            ErrorMessage::UsernameExists => "User with this username already exists".to_string(),
             ErrorMessage::UserUpdateError =>
                 "Unable to update user: email, username, password, or name maybe incorrect format or in use OR the user id does not exist".to_string(),
             ErrorMessage::VerificationTokenExpiredError =>
