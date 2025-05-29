@@ -12,7 +12,7 @@ use crate::{
         UserSortBy,
         UserStatistics,
         CreateUserRequest,
-    }, create_user::CreateUserParams},
+    }, create_user_dtos::CreateUserParams},
     schema::users::{ self, dsl::* },
 };
 
@@ -34,6 +34,8 @@ impl UserRepository {
             verification_token: token,
             token_expires_at: request.token_expires_at,
             role: request.role,
+            created_by: request.created_by,
+            force_password_change: request.force_password_change,
         };
 
         let user = diesel::insert_into(users::table).values(&new_user).get_result(conn)?;
@@ -61,9 +63,8 @@ impl UserRepository {
             verification_token: other_verification_token,
             token_expires_at: params.token_expires_at,
             role: params.role,
-            // Add these fields to your NewUser struct if needed
-            // created_by: params.created_by,
-            // force_password_change: params.force_password_change,
+            created_by: params.created_by,
+            force_password_change: params.force_password_change,
         };
 
         let user = diesel::insert_into(users::table).values(&new_user).get_result(conn)?;
