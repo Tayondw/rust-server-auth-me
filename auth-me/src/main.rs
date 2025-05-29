@@ -7,7 +7,6 @@ mod database;
 mod middleware;
 mod email;
 mod utils;
-mod operations;
 mod handlers;
 mod routes;
 mod repositories;
