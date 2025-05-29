@@ -1024,6 +1024,34 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 // }
 
 // ----------------------------- USER HANDLERS --------------------------
+
+// CREATE NEW USER
+// pub async fn create_user_handler(
+//     State(state): State<Arc<AppState>>,
+//     Json(user_data): Json<CreateUserRequest>
+// ) -> Result<Json<User>, HttpError> {
+//     let mut conn: PooledConnection<ConnectionManager<PgConnection>> = state.conn()?;
+
+//     create_user(
+//         &mut conn,
+//         user_data.name,
+//         user_data.email,
+//         user_data.username,
+//         user_data.password,
+//         user_data.verified,
+//         user_data.token_expires_at,
+//         user_data.role
+//     )
+//         .map(Json)
+//         .map_err(|e| {
+//             if e.to_string().contains("UNIQUE constraint failed") {
+//                 HttpError::unique_constraint_validation(ErrorMessage::UserCreationError.to_string())
+//             } else {
+//                 HttpError::server_error(ErrorMessage::UserCreationError.to_string())
+//             }
+//         })
+// }
+
 // pub async fn get_users(
 //     Query(query_params): Query<RequestQuery>,
 //     State(state): State<Arc<AppState>>
@@ -1189,3 +1217,57 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 //         }
 //     }
 // }
+
+// ------------------------------------ AUTHENTICATION HANDLERS ----------------------------
+// FROM SIGNUP HANDLER
+// Wrap in a transaction
+
+// // Hash password with argon2 before storing
+// let hashed_password = match hash(signup_data.password.clone()) {
+//     Ok(hash) => hash,
+//     Err(e) => {
+//         tracing::error!("Password hashing error: {:?}", e);
+//         return Err(HttpError::server_error("Failed to process password".to_string()));
+//     }
+// };
+
+// // Set verification token to expire in 1 hour
+// let token_expiration = chrono::Utc::now().naive_utc() + chrono::Duration::hours(1);
+// let user_result = conn.transaction::<User, DieselError, _>(|conn| {
+//     // Create user with the hashed password
+//     let user = UserRepository::create_user(conn, SignupRequest {
+//         name: signup_data.name.clone(),
+//         email: signup_data.email.clone(),
+//         username: signup_data.username.clone(),
+//         password: hashed_password,
+//         password_confirm: String::new(), // Not used in creation
+//         verified: signup_data.verified,
+//         token_expires_at: Some(token_expiration),
+//         terms_accepted: true, // Assuming they accepted during signup
+//         role: signup_data.role,
+//     }).map_err(|e| {
+//         tracing::error!("Error creating user: {}", e);
+//         DieselError::RollbackTransaction
+//     })?;
+
+//     // Send email inside the blocking context
+//     if let Some(token) = &user.verification_token {
+//         let email_str = user.email.clone();
+//         let username_str = user.username.clone();
+//         let token = token.clone();
+
+//         // Diesel transactions are sync, so block on the async send
+//         let result = tokio::task::block_in_place(move || {
+//             tokio::runtime::Handle
+//                 ::current()
+//                 .block_on(send_verification_email(&email_str, &username_str, &token))
+//         });
+
+//         if let Err(e) = result {
+//             tracing::error!("send_verification_email failed: {}", e);
+//             return Err(DieselError::RollbackTransaction); // triggers rollback
+//         }
+//     }
+
+//     Ok(user)
+// });
