@@ -5,7 +5,6 @@ use diesel::{
     pg::{ Pg, PgValue },
     serialize::{ self, Output, ToSql, IsNull },
     deserialize::{ self, FromSql },
-    sql_types::SqlType,
     AsExpression,
     FromSqlRow,
     query_builder::QueryId
@@ -15,10 +14,8 @@ use chrono::NaiveDateTime;
 use uuid::Uuid;
 
 use crate::schema::users;
+use crate::schema::sql_types::UserRole as UserRoleType;
 
-#[derive(SqlType)]
-#[diesel(postgres_type(name = "user_role"))]
-pub struct UserRoleType;
 
 // Implement QueryId for UserRoleType
 impl QueryId for UserRoleType {
@@ -80,6 +77,8 @@ pub struct User {
     pub verification_token: Option<String>,
     pub token_expires_at: Option<NaiveDateTime>,
     pub role: UserRole,
+    pub created_by: Option<Uuid>,
+    pub force_password_change: bool,
     pub created_at: Option<NaiveDateTime>,
     pub updated_at: Option<NaiveDateTime>,
 }
@@ -95,6 +94,8 @@ pub struct NewUser {
     pub verification_token: Option<String>,
     pub token_expires_at: Option<NaiveDateTime>,
     pub role: UserRole,
+    pub created_by: Option<Uuid>,
+    pub force_password_change: bool,
 }
 
 #[derive(AsChangeset, Deserialize, Debug)]
