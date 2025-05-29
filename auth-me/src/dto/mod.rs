@@ -1,6 +1,6 @@
 pub mod user_dtos;
 pub mod authentication_dtos;
-pub mod create_user;
+pub mod create_user_dtos;
 
 use serde::Serialize;
 
