@@ -51,6 +51,12 @@ pub struct CreateUserRequest {
     pub terms_accepted: bool,
 
     pub role: UserRole,
+
+    pub created_by: Option<Uuid>,
+
+    // Set to false since it is created by user
+    #[serde(default = "default_force_password_change")]
+    pub force_password_change: bool,
 }
 
 // Custom password validator function
@@ -76,6 +82,11 @@ lazy_static! {
 
 fn validate_terms_acceptance(terms: &bool) -> Result<(), ValidationError> {
     if *terms { Ok(()) } else { Err(ValidationError::new("Terms must be accepted")) }
+}
+
+/// Default to forcing password change for self-created users
+fn default_force_password_change() -> bool {
+    false
 }
 
 // #[derive(Debug)]
