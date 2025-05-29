@@ -11,6 +11,8 @@ CREATE TABLE users (
     verification_token VARCHAR(255),
     token_expires_at TIMESTAMP WITH TIME ZONE,
     role user_role NOT NULL DEFAULT 'user',
+    created_by UUID REFERENCES users(id),
+    force_password_change BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
