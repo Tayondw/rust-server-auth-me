@@ -18,7 +18,7 @@ use serde_json::json;
 use chrono::{ Utc, Duration };
 use time::Duration as TimeDuration;
 
-use tracing::{ info, error };
+use tracing::error;
 use validator::Validate;
 
 use crate::{
@@ -36,76 +36,55 @@ use crate::{
         Response,
         user_dtos::UserQuery,
     },
-    email::emails::{ send_verification_email, send_welcome_email, send_forgot_password_email },
+    email::emails::{ send_welcome_email, send_forgot_password_email },
     errors::{ ErrorMessage, HttpError },
     middleware::cookies::{ get_refresh_token, remove_auth_cookies },
-    models::User,
-    operations::user_operations::create_user,
+    models::{ User, UserRole },
     utils::{ password::hash, token::* },
     AppState,
     repositories::user_repository::UserRepository,
+    services::user_service::UserService,
 };
 
+/// Self-signup handler
 pub async fn signup_handler(
     State(state): State<Arc<AppState>>,
     Json(signup_data): Json<SignupRequest>
 ) -> Result<impl IntoResponse, HttpError> {
-    info!("Processing signup request for email: {}", signup_data.email);
-
+    // Validate input
     if let Err(validation_errors) = signup_data.validate() {
         return Err(HttpError::validation_error(validation_errors.to_string()));
     }
 
-    // Hash password with argon2 before storing
-    let hashed_password = match hash(signup_data.password.clone()) {
-        Ok(hash) => hash,
-        Err(e) => {
-            tracing::error!("Password hashing error: {:?}", e);
-            return Err(HttpError::server_error("Failed to process password".to_string()));
-        }
-    };
+    // Check if user already exists
+    let (email_exists, username_exists) = UserRepository::check_user_exists(
+        &state.config.database.pool,
+        &signup_data.email,
+        &signup_data.username
+    ).map_err(|e| HttpError::server_error(e.to_string()))?;
 
-    // Set verification token to expire in 1 hour
-    let token_expiration = chrono::Utc::now().naive_utc() + chrono::Duration::hours(1);
+    if email_exists {
+        return Err(HttpError::unique_constraint_validation(ErrorMessage::EmailExists.to_string()));
+    }
+
+    if username_exists {
+        return Err(
+            HttpError::unique_constraint_validation(ErrorMessage::UsernameExists.to_string())
+        );
+    }
 
     let mut conn = state.conn()?; // PooledConnection
 
-    // Wrap in a transaction
+    // Use transaction for user creation
     let user_result = conn.transaction::<User, DieselError, _>(|conn| {
-        // Create user with the hashed password
-        let user = UserRepository::create_user(conn, SignupRequest {
-            name: signup_data.name.clone(),
-            email: signup_data.email.clone(),
-            username: signup_data.username.clone(),
-            password: hashed_password,
-            password_confirm: String::new(), // Not used in creation
-            verified: signup_data.verified,
-            token_expires_at: Some(token_expiration),
-            terms_accepted: true, // Assuming they accepted during signup
-            role: signup_data.role,
-        }).map_err(|e| {
-            tracing::error!("Error creating user: {}", e);
-            DieselError::RollbackTransaction
-        })?;
-
-        // Send email inside the blocking context
-        if let Some(token) = &user.verification_token {
-            let email_str = user.email.clone();
-            let username_str = user.username.clone();
-            let token = token.clone();
-
-            // Diesel transactions are sync, so block on the async send
-            let result = tokio::task::block_in_place(move || {
+        // Use the service layer for consistent user creation
+        let user = tokio::task
+            ::block_in_place(move || {
                 tokio::runtime::Handle
                     ::current()
-                    .block_on(send_verification_email(&email_str, &username_str, &token))
-            });
-
-            if let Err(e) = result {
-                tracing::error!("send_verification_email failed: {}", e);
-                return Err(DieselError::RollbackTransaction); // triggers rollback
-            }
-        }
+                    .block_on(UserService::create_user_signup(conn, signup_data, &state))
+            })
+            .map_err(|_| DieselError::RollbackTransaction)?;
 
         Ok(user)
     });
@@ -142,7 +121,7 @@ pub async fn verify_email_handler(
         UserQuery::Token(query.token.clone())
     )
         .map_err(|e| HttpError::server_error(e.to_string()))?
-        .ok_or_else(|| HttpError::not_found("User not found".to_string()))?;
+        .ok_or_else(|| HttpError::not_found(ErrorMessage::UserNotFound.to_string()))?;
 
     // Step 3: Use repository to verify token
     UserRepository::verify_token(&state.config.database.pool, &query.token).map_err(|e| {
@@ -188,11 +167,39 @@ pub async fn verify_email_handler(
             json!({
             "message": "Email verified successfully",
             "user_id": user.id,
+            "creation_type": if user.created_by.is_some() { 
+                "AdminCreated" 
+            } else { 
+                "SelfSignup" 
+            }
         })
         ),
     );
 
     Ok(response)
+}
+
+/// Get user creation permissions (helper endpoint)
+pub async fn get_user_creation_permissions(Extension(
+    auth_user,
+): Extension<AuthenticatedUser>) -> Result<impl IntoResponse, HttpError> {
+    let can_create = UserService::can_create_users(&auth_user.role);
+
+    let allowed_roles = match auth_user.role {
+        UserRole::Admin => vec![UserRole::Admin, UserRole::Moderator, UserRole::User],
+        UserRole::Moderator => vec![UserRole::User],
+        _ => vec![],
+    };
+
+    Ok(
+        Json(
+            json!({
+        "can_create_users": can_create,
+        "allowed_roles": allowed_roles,
+        "current_role": auth_user.role
+    })
+        )
+    )
 }
 
 // Handler that only needs user ID
@@ -226,7 +233,7 @@ pub async fn list_all_users(
     State(_state): State<Arc<AppState>>
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // This user is guaranteed to be an Admin because of the middleware
-    println!("Admin {} is listing all users", authenticated_user.user.email);
+    println!("Admin {} is listing all users", authenticated_user.email);
 
     // I could add more database queries here to get all users
     // For now, just return the admin's info as proof of concept
@@ -235,9 +242,9 @@ pub async fn list_all_users(
             json!({
         "message": "Admin access granted",
         "admin": {
-            "name": authenticated_user.user.name,
-            "email": authenticated_user.user.email,
-            "role": authenticated_user.user.role.to_str()
+            "name": authenticated_user.name,
+            "email": authenticated_user.email,
+            "role": authenticated_user.role.to_str()
         }
     })
         )
