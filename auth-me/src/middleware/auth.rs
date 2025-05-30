@@ -7,16 +7,16 @@ use axum::{
     http::{ StatusCode, header },
     Extension,
 };
-use axum_extra::extract::CookieJar;
+use tower_cookies::Cookies;
 
 use crate::{
     models::{ User, UserRole },
     utils::token::AuthService,
-    config::{ DatabaseConfig, ConfigError },
+    config::{ ConfigError, DatabaseConfig },
     repositories::user_repository::UserRepository,
 };
 
-/// Struct to hold user ID
+/// Struct to hold user id after token validation
 #[derive(Debug, Clone)]
 pub struct AuthUser {
     pub user_id: String,
@@ -25,7 +25,25 @@ pub struct AuthUser {
 /// Struct that holds authenticated user information, which gets attached to requests after role check
 #[derive(Debug, Clone)]
 pub struct AuthenticatedUser {
-    pub user: User, // -> user struct from model
+    pub id: uuid::Uuid,
+    pub email: String,
+    pub name: String,
+    pub role: UserRole,
+    pub verified: bool,
+    pub created_by: Option<uuid::Uuid>,
+}
+
+impl From<User> for AuthenticatedUser {
+    fn from(user: User) -> Self {
+        Self {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            verified: user.verified,
+            created_by: user.created_by,
+        }
+    }
 }
 
 /*
@@ -33,21 +51,29 @@ pub struct AuthenticatedUser {
 Provide middleware functions that work together to secure API endpoints by verifying user identity and checking permissions.
 */
 
+/// Main authentication middleware - validates token and loads user with role checking
 pub async fn auth_middleware(
     Extension(auth_service): Extension<Arc<AuthService>>,
+    Extension(database_config): Extension<Arc<DatabaseConfig>>,
+    cookies: Cookies,
     mut request: Request,
     next: Next
 ) -> Result<Response, StatusCode> {
     // Extract token from cookies or Authorization header
-    let token: String = extract_token(&request)?;
+    let token: String = extract_token(&request, &cookies)?;
 
     // Decode token to get user ID using your existing function
     let user_id: String = auth_service
         .extract_user_id_from_token(&token, false)
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
+    // Fetch the full user from database
+    let user = get_user_from_db(&database_config, &user_id).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::UNAUTHORIZED)?; // User no longer exists
+
     // Add the user ID to request extensions
-    request.extensions_mut().insert(AuthUser { user_id });
+    request.extensions_mut().insert(AuthenticatedUser::from(user));
 
     // Continue with the request
     Ok(next.run(request).await)
@@ -77,7 +103,7 @@ pub async fn role_check_middleware(
     }
 
     // Add full user info to extensions for handlers that need it
-    request.extensions_mut().insert(AuthenticatedUser { user });
+    request.extensions_mut().insert(AuthenticatedUser::from(user));
 
     Ok(next.run(request).await)
 }
@@ -92,7 +118,7 @@ async fn get_user_from_db(
     // Parse user_id as UUID
     let user_uuid = uuid::Uuid
         ::parse_str(user_id)
-        .map_err(|_| ConfigError::Config("Invalid user ID format".to_string()))?;
+        .map_err(|_| ConfigError::Config("Invalid user id format".to_string()))?;
 
     // Get the database pool from your DatabaseConfig
     let pool = &database_config.pool;
@@ -101,10 +127,9 @@ async fn get_user_from_db(
     UserRepository::get_user(pool, UserQuery::Id(user_uuid))
 }
 
-fn extract_token(request: &Request) -> Result<String, StatusCode> {
-    // Try cookies first
-    let cookie_jar: CookieJar = CookieJar::from_headers(request.headers());
-    if let Some(cookie) = cookie_jar.get("access_token") {
+fn extract_token(request: &Request, cookies: &Cookies) -> Result<String, StatusCode> {
+    // Try cookies first (access_token)
+    if let Some(cookie) = cookies.get("access_token") {
         return Ok(cookie.value().to_string());
     }
 

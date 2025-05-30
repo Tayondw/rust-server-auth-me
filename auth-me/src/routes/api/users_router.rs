@@ -17,7 +17,7 @@ pub fn public_user_routes() -> Router<Arc<AppState>> {
 // Protected user endpoints (authentication required)
 pub fn user_routes() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/api/users", get(get_users).post(create_user_handler))
+        .route("/api/users", get(get_users).post(admin_create_user_handler))
         .route("/api/users/search", get(search_users))
         .route("/api/users/advanced-search", get(advanced_search_users))
         .route(
