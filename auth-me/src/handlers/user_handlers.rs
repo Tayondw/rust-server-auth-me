@@ -1,30 +1,48 @@
 use std::sync::Arc;
 
-use axum::{ extract::{ State, Path, Query }, Json, http::StatusCode };
-use diesel::{ r2d2::{ PooledConnection, ConnectionManager }, PgConnection };
+use axum::{
+    extract::{ State, Path, Query },
+    Json,
+    http::StatusCode,
+    response::IntoResponse,
+    Extension,
+};
+use diesel::{
+    prelude::*,
+    r2d2::{ PooledConnection, ConnectionManager },
+    PgConnection,
+    result::Error as DieselError,
+};
 use uuid::Uuid;
+use tracing::{ info, error };
 use serde_json::{ json, Value };
 use validator::Validate;
 
 use crate::{
     config::ConfigError,
     database::DbConnExt,
-    dto::user_dtos::{
-        CreateUserRequest,
-        FilterUser,
-        RequestQuery,
-        SingleUserResponse,
-        UpdateUserRequest,
-        UserData,
-        UserListResponse,
-        UserQuery,
-        UserSearchQuery,
+    models::User,
+    middleware::auth::AuthenticatedUser,
+    dto::{
+        user_dtos::{
+            FilterUser,
+            RequestQuery,
+            SingleUserResponse,
+            UpdateUserRequest,
+            UserData,
+            UserListResponse,
+            UserQuery,
+            UserSearchQuery,
+        },
+        create_user_dtos::{ AdminCreateUserRequest, AdminCreateUserResponse },
     },
     errors::{ ErrorMessage, HttpError },
-    models::User,
-    operations::user_operations::*,
     repositories::user_repository::UserRepository,
-    services::{ cache_services::CacheService, enhanced_cache_services::EnhancedCacheService },
+    services::{
+        cache_services::CacheService,
+        enhanced_cache_services::EnhancedCacheService,
+        user_service::UserService,
+    },
     AppState,
 };
 
@@ -209,31 +227,58 @@ pub async fn search_users(
     Ok(Json(response))
 }
 
-// CREATE NEW USER
-pub async fn create_user_handler(
+/// Admin user creation handler
+pub async fn admin_create_user_handler(
     State(state): State<Arc<AppState>>,
-    Json(user_data): Json<CreateUserRequest>
-) -> Result<Json<User>, HttpError> {
-    let mut conn: PooledConnection<ConnectionManager<PgConnection>> = state.conn()?;
+    Extension(auth_user): Extension<AuthenticatedUser>,
+    Json(admin_request): Json<AdminCreateUserRequest>
+) -> Result<impl IntoResponse, HttpError> {
+    // Validate input
+    if let Err(validation_errors) = admin_request.validate() {
+        return Err(HttpError::validation_error(validation_errors.to_string()));
+    }
 
-    create_user(
-        &mut conn,
-        user_data.name,
-        user_data.email,
-        user_data.username,
-        user_data.password,
-        user_data.verified,
-        user_data.token_expires_at,
-        user_data.role
-    )
-        .map(Json)
-        .map_err(|e| {
-            if e.to_string().contains("UNIQUE constraint failed") {
-                HttpError::unique_constraint_validation(ErrorMessage::UserCreationError.to_string())
-            } else {
-                HttpError::server_error(ErrorMessage::UserCreationError.to_string())
-            }
-        })
+    // Check permissions
+    if !UserService::can_create_users(&auth_user.role) {
+        return Err(HttpError::unauthorized(ErrorMessage::PermissionDenied.to_string()));
+    }
+
+    // Validate role creation permissions
+    UserService::validate_admin_creation_permissions(&auth_user.role, &admin_request.role).map_err(
+        |e| HttpError::unauthorized(e.to_string())
+    )?;
+
+    let mut conn = state.conn()?;
+
+    // Use transaction for user creation
+    let creation_result = conn.transaction::<AdminCreateUserResponse, DieselError, _>(|conn| {
+        // Use the service layer for admin user creation
+        let response = tokio::task
+            ::block_in_place(move || {
+                tokio::runtime::Handle
+                    ::current()
+                    .block_on(
+                        UserService::create_user_admin(conn, admin_request, auth_user.id, &state)
+                    )
+            })
+            .map_err(|_| DieselError::RollbackTransaction)?;
+
+        Ok(response)
+    });
+
+    match creation_result {
+        Ok(response) => {
+            info!("Admin {} created user {}", auth_user.id, response.user_id);
+            Ok(Json(response))
+        }
+        Err(DieselError::RollbackTransaction) => {
+            Err(HttpError::server_error("Failed to create user".to_string()))
+        }
+        Err(e) => {
+            error!("Database error during admin user creation: {}", e);
+            Err(HttpError::server_error("Failed to create user".to_string()))
+        }
+    }
 }
 
 /// UPDATE USER BY ID
