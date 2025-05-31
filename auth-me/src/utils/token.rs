@@ -139,6 +139,10 @@ impl AuthService {
 
         decode_token(token, secret)
     }
+
+    pub fn generate_verification_token() -> String {
+        Uuid::new_v4().to_string()
+    }
 }
 
 pub fn decode_token<T: Into<String>>(token: T, secret: &[u8]) -> Result<String, HttpError> {
