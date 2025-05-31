@@ -7,15 +7,13 @@ use diesel::{
     deserialize::{ self, FromSql },
     AsExpression,
     FromSqlRow,
-    query_builder::QueryId
+    query_builder::QueryId,
 };
 use serde::{ Deserialize, Serialize };
 use chrono::NaiveDateTime;
 use uuid::Uuid;
 
-use crate::schema::users;
-use crate::schema::sql_types::UserRole as UserRoleType;
-
+use crate::schema::{ users, sql_types::UserRole as UserRoleType };
 
 // Implement QueryId for UserRoleType
 impl QueryId for UserRoleType {
