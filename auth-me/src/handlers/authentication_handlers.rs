@@ -12,7 +12,7 @@ use diesel::{ prelude::*, result::Error as DieselError };
 
 use tower_cookies::Cookies;
 use cookie::Cookie;
-
+use serde::Deserialize;
 use serde_json::json;
 
 use chrono::{ Utc, Duration };
@@ -42,7 +42,10 @@ use crate::{
     models::{ User, UserRole },
     utils::{ password::hash, token::* },
     AppState,
-    repositories::user_repository::UserRepository,
+    repositories::{
+        user_repository::UserRepository,
+        pending_user_repository::PendingUserRepository,
+    },
     services::user_service::UserService,
 };
 
@@ -56,55 +59,18 @@ pub async fn signup_handler(
         return Err(HttpError::validation_error(validation_errors.to_string()));
     }
 
-    // Check if user already exists
-    let (email_exists, username_exists) = UserRepository::check_user_exists(
-        &state.config.database.pool,
-        &signup_data.email,
-        &signup_data.username
-    ).map_err(|e| HttpError::server_error(e.to_string()))?;
-
-    if email_exists {
-        return Err(HttpError::unique_constraint_validation(ErrorMessage::EmailExists.to_string()));
-    }
-
-    if username_exists {
-        return Err(
-            HttpError::unique_constraint_validation(ErrorMessage::UsernameExists.to_string())
-        );
-    }
-
-    let mut conn = state.conn()?; // PooledConnection
-
-    // Use transaction for user creation
-    let user_result = conn.transaction::<User, DieselError, _>(|conn| {
-        // Use the service layer for consistent user creation
-        let user = tokio::task
-            ::block_in_place(move || {
-                tokio::runtime::Handle
-                    ::current()
-                    .block_on(UserService::create_user_signup(conn, signup_data, &state))
-            })
-            .map_err(|_| DieselError::RollbackTransaction)?;
-
-        Ok(user)
-    });
-
-    match user_result {
-        Ok(_) =>
+    // Create pending user (this handles all validation and email sending)
+    match UserService::create_pending_user_signup(signup_data, &state.config.database.pool).await {
+        Ok(_pending_user) => {
             Ok(
                 Json(
                     serde_json::json!({
-            "message": "User created successfully. Please verify your email."
-        })
+                "message": "Please check your email and click the verification link to complete your registration."
+            })
                 )
-            ),
-        Err(DieselError::RollbackTransaction) => {
-            Err(HttpError::server_error(ErrorMessage::EmailVerificationError.to_string()))
+            )
         }
-        Err(e) => {
-            error!("Database error: {}", e);
-            Err(HttpError::server_error(ErrorMessage::UserCreationError.to_string()))
-        }
+        Err(e) => Err(e),
     }
 }
 
@@ -115,68 +81,128 @@ pub async fn verify_email_handler(
     // Step 1: Validate query
     query.validate().map_err(|e| HttpError::bad_request(e.to_string()))?;
 
-    // Step 2: Get the verified user
-    let user = UserRepository::get_user(
+    // Step 2: Validate pending user token and get pending user
+    let pending_user = UserService::validate_pending_user_token(
         &state.config.database.pool,
-        UserQuery::Token(query.token.clone())
-    )
-        .map_err(|e| HttpError::server_error(e.to_string()))?
-        .ok_or_else(|| HttpError::not_found(ErrorMessage::UserNotFound.to_string()))?;
+        &query.token
+    ).await?;
 
-    // Step 3: Use repository to verify token
-    UserRepository::verify_token(&state.config.database.pool, &query.token).map_err(|e| {
-        match e {
-            crate::config::ConfigError::NotFound =>
-                HttpError::unauthorized(ErrorMessage::InvalidToken.to_string()),
-            _ => HttpError::server_error(e.to_string()),
+    // Step 3: Create actual user from pending user in transaction
+    let mut conn = state.conn()?;
+    
+    let pending_user_id = pending_user.id;
+
+    let user_result = conn.transaction::<User, DieselError, _>(|conn| {
+        // Complete user registration from pending user
+        let user = tokio::task
+            ::block_in_place(move || {
+                tokio::runtime::Handle
+                    ::current()
+                    .block_on(
+                        UserService::complete_user_registration_from_pending(
+                            conn,
+                            pending_user
+                        )
+                    )
+            })
+            .map_err(|_| DieselError::RollbackTransaction)?;
+
+        Ok(user)
+    });
+
+    match user_result {
+        Ok(user) => {
+            // Step 4: Clean up pending user after successful creation
+            if
+                let Err(e) = UserService::cleanup_pending_user(
+                    &state.config.database.pool,
+                    pending_user_id
+                ).await
+            {
+                eprintln!("Failed to cleanup pending user: {}", e);
+                // Don't fail the request for this, just log it
+            }
+
+            // Step 5: Send welcome email
+            if let Err(e) = send_welcome_email(&user.email, &user.name).await {
+                eprintln!("Failed to send welcome email: {}", e);
+            }
+
+            // Step 6: Generate JWT token
+            let auth_service = AuthService::new(&state.config, state.config.database.pool.clone());
+            let jwt = auth_service
+                .generate_access_token(&user.id.to_string())
+                .map_err(|e| HttpError::server_error(e.to_string()))?;
+
+            // Step 7: Set Cookie
+            let cookie_duration = time::Duration::minutes(
+                state.config.database.jwt_expires_in * 60
+            );
+            let cookie = Cookie::build(("token", jwt.clone()))
+                .path("/")
+                .max_age(cookie_duration)
+                .http_only(true)
+                .build();
+
+            let mut headers = HeaderMap::new();
+            headers.append(
+                header::SET_COOKIE,
+                cookie
+                    .to_string()
+                    .parse()
+                    .map_err(|_| HttpError::server_error("Failed to parse cookie".to_string()))?
+            );
+
+            // Step 8: Return success with cookie header
+            let response = (
+                headers,
+                Json(
+                    json!({
+                    "message": "Email verified successfully and account created",
+                    "user_id": user.id,
+                    "creation_type": if user.created_by.is_some() { 
+                        "AdminCreated" 
+                    } else { 
+                        "SelfSignup" 
+                    }
+                })
+                ),
+            );
+
+            Ok(response)
         }
-    })?;
+        Err(e) => {
+            error!("Failed to create user from pending: {}", e);
+            Err(HttpError::server_error(ErrorMessage::UserCreationError.to_string()))
+        }
+    }
+}
 
-    // Step 4: Send welcome email
-    if let Err(e) = send_welcome_email(&user.email, &user.name).await {
-        eprintln!("Failed to send welcome email: {}", e);
+#[derive(Deserialize, Validate)]
+pub struct ResendVerificationRequest {
+    #[validate(email)]
+    pub email: String,
+}
+
+pub async fn resend_verification_email_handler(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<ResendVerificationRequest>
+) -> Result<impl IntoResponse, HttpError> {
+    // Validate email format
+    if request.email.is_empty() {
+        return Err(HttpError::bad_request("Email is required".to_string()));
     }
 
-    // Step 5: Generate JWT token
-    let auth_service = AuthService::new(&state.config, state.config.database.pool.clone());
-    let jwt = auth_service
-        .generate_access_token(&user.id.to_string())
-        .map_err(|e| HttpError::server_error(e.to_string()))?;
+    // Resend verification email
+    UserService::resend_verification_email(&state.config.database.pool, &request.email).await?;
 
-    // Step 6: Set Cookie
-    let cookie_duration = time::Duration::minutes(state.config.database.jwt_expires_in * 60);
-    let cookie = Cookie::build(("token", jwt.clone()))
-        .path("/")
-        .max_age(cookie_duration)
-        .http_only(true)
-        .build();
-
-    let mut headers = HeaderMap::new();
-    headers.append(
-        header::SET_COOKIE,
-        cookie
-            .to_string()
-            .parse()
-            .map_err(|_| HttpError::server_error("Failed to parse cookie".to_string()))?
-    );
-
-    // Step 7: Return success with cookie header
-    let response = (
-        headers,
+    Ok(
         Json(
-            json!({
-            "message": "Email verified successfully",
-            "user_id": user.id,
-            "creation_type": if user.created_by.is_some() { 
-                "AdminCreated" 
-            } else { 
-                "SelfSignup" 
-            }
-        })
-        ),
-    );
-
-    Ok(response)
+            serde_json::json!({
+        "message": "If a pending registration exists for this email, a new verification email has been sent."
+    })
+        )
+    )
 }
 
 /// Get user creation permissions (helper endpoint)
