@@ -1271,3 +1271,135 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 
 //     Ok(user)
 // });
+
+// pub async fn signup_handler(
+//     State(state): State<Arc<AppState>>,
+//     Json(signup_data): Json<SignupRequest>
+// ) -> Result<impl IntoResponse, HttpError> {
+//     // Validate input
+//     if let Err(validation_errors) = signup_data.validate() {
+//         return Err(HttpError::validation_error(validation_errors.to_string()));
+//     }
+
+//     // Check if user already exists in both tables
+//     let (email_exists, username_exists) = PendingUserRepository::check_user_exists_comprehensive(
+//         &state.config.database.pool,
+//         &signup_data.email,
+//         &signup_data.username
+//     ).map_err(|e| HttpError::server_error(e.to_string()))?;
+
+//     if email_exists {
+//         return Err(HttpError::unique_constraint_validation(ErrorMessage::EmailExists.to_string()));
+//     }
+
+//     if username_exists {
+//         return Err(
+//             HttpError::unique_constraint_validation(ErrorMessage::UsernameExists.to_string())
+//         );
+//     }
+
+//     let mut conn = state.conn()?; // PooledConnection
+
+//     // Use transaction for user creation
+//     let user_result = conn.transaction::<User, DieselError, _>(|conn| {
+//         // Use the service layer for consistent user creation
+//         let user = tokio::task
+//             ::block_in_place(move || {
+//                 tokio::runtime::Handle
+//                     ::current()
+//                     .block_on(UserService::create_user_signup(conn, signup_data, &state))
+//             })
+//             .map_err(|_| DieselError::RollbackTransaction)?;
+
+//         Ok(user)
+//     });
+
+//     match user_result {
+//         Ok(_) =>
+//             Ok(
+//                 Json(
+//                     serde_json::json!({
+//             "message": "User created successfully. Please verify your email."
+//         })
+//                 )
+//             ),
+//         Err(DieselError::RollbackTransaction) => {
+//             Err(HttpError::server_error(ErrorMessage::EmailVerificationError.to_string()))
+//         }
+//         Err(e) => {
+//             error!("Database error: {}", e);
+//             Err(HttpError::server_error(ErrorMessage::UserCreationError.to_string()))
+//         }
+//     }
+// }
+
+// pub async fn verify_email_handler(
+//     State(state): State<Arc<AppState>>,
+//     Query(query): Query<VerifyEmailQuery>
+// ) -> Result<impl IntoResponse, HttpError> {
+//     // Step 1: Validate query
+//     query.validate().map_err(|e| HttpError::bad_request(e.to_string()))?;
+
+//     // Step 2: Get the verified user
+//     let user = UserRepository::get_user(
+//         &state.config.database.pool,
+//         UserQuery::Token(query.token.clone())
+//     )
+//         .map_err(|e| HttpError::server_error(e.to_string()))?
+//         .ok_or_else(|| HttpError::not_found(ErrorMessage::UserNotFound.to_string()))?;
+
+//     // Step 3: Use repository to verify token
+//     UserRepository::verify_token(&state.config.database.pool, &query.token).map_err(|e| {
+//         match e {
+//             crate::config::ConfigError::NotFound =>
+//                 HttpError::unauthorized(ErrorMessage::InvalidToken.to_string()),
+//             _ => HttpError::server_error(e.to_string()),
+//         }
+//     })?;
+
+//     // Step 4: Send welcome email
+//     if let Err(e) = send_welcome_email(&user.email, &user.name).await {
+//         eprintln!("Failed to send welcome email: {}", e);
+//     }
+
+//     // Step 5: Generate JWT token
+//     let auth_service = AuthService::new(&state.config, state.config.database.pool.clone());
+//     let jwt = auth_service
+//         .generate_access_token(&user.id.to_string())
+//         .map_err(|e| HttpError::server_error(e.to_string()))?;
+
+//     // Step 6: Set Cookie
+//     let cookie_duration = time::Duration::minutes(state.config.database.jwt_expires_in * 60);
+//     let cookie = Cookie::build(("token", jwt.clone()))
+//         .path("/")
+//         .max_age(cookie_duration)
+//         .http_only(true)
+//         .build();
+
+//     let mut headers = HeaderMap::new();
+//     headers.append(
+//         header::SET_COOKIE,
+//         cookie
+//             .to_string()
+//             .parse()
+//             .map_err(|_| HttpError::server_error("Failed to parse cookie".to_string()))?
+//     );
+
+//     // Step 7: Return success with cookie header
+//     let response = (
+//         headers,
+//         Json(
+//             json!({
+//             "message": "Email verified successfully",
+//             "user_id": user.id,
+//             "creation_type": if user.created_by.is_some() { 
+//                 "AdminCreated" 
+//             } else { 
+//                 "SelfSignup" 
+//             }
+//         })
+//         ),
+//     );
+
+//     Ok(response)
+// }
