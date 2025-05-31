@@ -14,6 +14,7 @@ use crate::{
         CreateUserRequest,
     }, create_user_dtos::CreateUserParams},
     schema::users::{ self, dsl::* },
+    utils::token::AuthService
 };
 
 pub struct UserRepository;
@@ -23,7 +24,7 @@ impl UserRepository {
         conn: &mut PgConnection,
         request: CreateUserRequest
     ) -> Result<User, ConfigError> {
-        let token: Option<String> = Some(Uuid::new_v4().to_string());
+        let token: Option<String> = Some(AuthService::generate_verification_token());
 
         let new_user = NewUser {
             name: request.name,
@@ -51,7 +52,7 @@ impl UserRepository {
         let other_verification_token = if params.verified {
             None // No token needed for pre-verified users
         } else {
-            Some(Uuid::new_v4().to_string())
+            Some(AuthService::generate_verification_token())
         };
 
         let new_user = NewUser {
