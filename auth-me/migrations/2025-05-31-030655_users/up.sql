@@ -17,4 +17,8 @@ CREATE TABLE users (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Create indexes for performance
 CREATE INDEX users_email_idx ON users (email);
+CREATE INDEX users_username_idx ON users (username);
+CREATE INDEX users_verification_token_idx ON users (verification_token);
+CREATE INDEX users_token_expires_at_idx ON users (token_expires_at);
