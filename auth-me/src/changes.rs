@@ -1403,3 +1403,60 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 
 //     Ok(response)
 // }
+
+// ----------------------------------------------- AUTH MIDDLEWARE ----------------------------------------------
+// pub async fn auth_middleware(
+//     Extension(auth_service): Extension<Arc<AuthService>>,
+//     Extension(database_config): Extension<Arc<DatabaseConfig>>,
+//     cookies: Cookies,
+//     mut request: Request,
+//     next: Next
+// ) -> Result<Response, StatusCode> {
+//     // Extract token from cookies or Authorization header
+//     let token: String = extract_token(&request, &cookies)?;
+
+//     // Decode token to get user ID using your existing function
+//     let user_id: String = auth_service
+//         .extract_user_id_from_token(&token, false)
+//         .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+//     // Fetch the full user from database
+//     let user = get_user_from_db(&database_config, &user_id).await
+//         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+//         .ok_or(StatusCode::UNAUTHORIZED)?; // User no longer exists
+
+//     // Add the user ID to request extensions
+//     request.extensions_mut().insert(AuthenticatedUser::from(user));
+
+//     // Continue with the request
+//     Ok(next.run(request).await)
+// }
+
+// pub async fn role_check_middleware(
+//     Extension(_auth_service): Extension<Arc<AuthService>>,
+//     Extension(database_config): Extension<Arc<DatabaseConfig>>,
+//     mut request: Request,
+//     next: Next,
+//     required_roles: Vec<UserRole>
+// ) -> Result<Response, StatusCode> {
+//     // Get the authenticated user id from the previous middleware
+//     let auth_user: &AuthUser = request
+//         .extensions()
+//         .get::<AuthUser>()
+//         .ok_or(StatusCode::UNAUTHORIZED)?;
+
+//     // Fetch the full user from database using your DatabaseConfig
+//     let user: User = get_user_from_db(&database_config, &auth_user.user_id).await
+//         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+//         .ok_or(StatusCode::UNAUTHORIZED)?; // User no longer exists
+
+//     // Check if user has required role
+//     if !required_roles.contains(&user.role) {
+//         return Err(StatusCode::FORBIDDEN);
+//     }
+
+//     // Add full user info to extensions for handlers that need it
+//     request.extensions_mut().insert(AuthenticatedUser::from(user));
+
+//     Ok(next.run(request).await)
+// }
