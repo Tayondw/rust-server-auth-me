@@ -21,7 +21,7 @@ use validator::Validate;
 use crate::{
     config::ConfigError,
     database::DbConnExt,
-    models::User,
+    models::{User, UserRole},
     middleware::auth::AuthenticatedUser,
     dto::{
         user_dtos::{
@@ -298,6 +298,7 @@ pub async fn update_user_handler(
 pub async fn update_user(
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<Uuid>,
+    Extension(current_admin): Extension<AuthenticatedUser>,
     Json(update_data): Json<UpdateUserRequest>
 ) -> Result<Json<SingleUserResponse>, HttpError> {
     // Get a connection from the pool
@@ -310,10 +311,26 @@ pub async fn update_user(
             HttpError::new(ErrorMessage::UserNoLongerExists.to_string(), StatusCode::NOT_FOUND)
         )?;
 
+    // Protection: Don't allow role changes unless explicitly intended
+    // If no role is specified in the update, preserve the current role
+    let mut protected_update_data = update_data;
+    if protected_update_data.role.is_none() {
+        protected_update_data.role = Some(old_user.role); // Explicitly preserve current role
+    }
+
+    // Additional protection: Log any admin role changes
+    if old_user.role == UserRole::Admin && protected_update_data.role != Some(UserRole::Admin) {
+        tracing::warn!(
+            "Admin user {} role being changed from Admin to {:?} by user {}",
+            user_id,
+            protected_update_data.role,
+            current_admin.id
+        );
+    }
+
     // Perform the update
-    let updated_user = UserRepository::update_user(&mut conn, user_id, update_data).map_err(|e|
-        HttpError::server_error(e.to_string())
-    )?;
+    let updated_user = UserRepository::update_user(&mut conn, user_id, protected_update_data)
+        .map_err(|e| HttpError::server_error(e.to_string()))?;
 
     // Create cache service and enhanced cache service from config
     let cache_service = CacheService::new(state.config.cache.clone());
