@@ -4,7 +4,7 @@ use axum::{ routing::{ get, patch, post }, Router, middleware };
 use crate::{
     AppState,
     handlers::{ user_handlers::*, additional_cache_handlers::* },
-    middleware::auth::{ auth_middleware, require_roles },
+    middleware::auth::{ auth_middleware, require_roles, require_admin },
     models::UserRole,
     utils::{ reports::get_reports, settings::admin_settings },
 };
@@ -24,7 +24,7 @@ pub fn user_routes() -> Router<Arc<AppState>> {
             "/api/users/{id}",
             patch(update_user).get(get_user_by_id).delete(delete_user_handler)
         )
-        .layer(middleware::from_fn(require_roles(vec![UserRole::Admin])))
+        .layer(middleware::from_fn(require_admin()))
         .layer(middleware::from_fn(auth_middleware))
 }
 
