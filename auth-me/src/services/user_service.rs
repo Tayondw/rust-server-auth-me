@@ -132,7 +132,7 @@ impl UserService {
             password: hashed_password,
             verification_token: verification_token.clone(),
             token_expires_at: token_expiration,
-            role: UserRole::User, // Default role for self-signup
+            role: signup_data.role,
             created_by: None, // Self-created
             force_password_change: false, // They chose their password
         };
