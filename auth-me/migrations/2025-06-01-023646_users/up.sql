@@ -1,4 +1,5 @@
-CREATE TYPE user_role AS ENUM ('admin', 'user');
+CREATE TYPE user_role AS ENUM ('admin', 'user', 'manager', 'moderator');
+
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE users (

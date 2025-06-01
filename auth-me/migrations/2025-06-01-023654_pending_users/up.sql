@@ -13,7 +13,7 @@ CREATE TABLE pending_users (
 );
 
 -- Create indexes for performance
-CREATE INDEX pending_users_email_idx ON pending_users(email);
-CREATE INDEX pending_users_username_idx ON pending_users(username);
-CREATE INDEX pending_users_verification_token_idx ON pending_users(verification_token);
-CREATE INDEX pending_users_token_expires_at_idx ON pending_users(token_expires_at);
+CREATE INDEX idx_pending_users_email ON pending_users(email);
+CREATE INDEX idx_pending_users_username ON pending_users(username);
+CREATE INDEX idx_pending_users_verification_token ON pending_users(verification_token);
+CREATE INDEX idx_pending_users_token_expires_at ON pending_users(token_expires_at);
