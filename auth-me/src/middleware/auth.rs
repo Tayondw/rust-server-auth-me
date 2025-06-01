@@ -62,53 +62,92 @@ pub async fn auth_middleware(
     // Extract token from cookies or Authorization header
     let token: String = extract_token(&request, &cookies)?;
 
-    // Decode token to get user ID using your existing function
-    let user_id: String = auth_service
-        .extract_user_id_from_token(&token, false)
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    // Decode token to get user ID
+    let user_id: String = auth_service.extract_user_id_from_token(&token, false).map_err(|e| {
+        tracing::error!("Token validation failed: {}", e);
+        StatusCode::UNAUTHORIZED
+    })?;
 
     // Fetch the full user from database
     let user = get_user_from_db(&database_config, &user_id).await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::UNAUTHORIZED)?; // User no longer exists
+        .map_err(|e| {
+            tracing::error!("Database error when fetching user: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or_else(|| {
+            tracing::warn!("User {} no longer exists", user_id);
+            StatusCode::UNAUTHORIZED
+        })?;
 
-    // Add the user ID to request extensions
+    // Add detailed logging
+    tracing::debug!(
+        "Authenticated user: id={}, email={}, role={:?}, verified={}",
+        user.id,
+        user.email,
+        user.role,
+        user.verified
+    );
+
+    // Add the authenticated user to request extensions
     request.extensions_mut().insert(AuthenticatedUser::from(user));
 
     // Continue with the request
     Ok(next.run(request).await)
 }
 
+/// Role check middleware with optional verification requirement
 pub async fn role_check_middleware(
-    Extension(_auth_service): Extension<Arc<AuthService>>,
-    Extension(database_config): Extension<Arc<DatabaseConfig>>,
-    mut request: Request,
+    request: Request,
     next: Next,
-    required_roles: Vec<UserRole>
+    required_roles: Vec<UserRole>,
+    require_verified: bool
 ) -> Result<Response, StatusCode> {
-    // Get the authenticated user id from the previous middleware
-    let auth_user: &AuthUser = request
+    // Get the authenticated user from the previous middleware
+    let auth_user: &AuthenticatedUser = request
         .extensions()
-        .get::<AuthUser>()
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        .get::<AuthenticatedUser>()
+        .ok_or_else(|| {
+            tracing::error!("AuthenticatedUser not found in request extensions");
+            StatusCode::UNAUTHORIZED
+        })?;
 
-    // Fetch the full user from database using your DatabaseConfig
-    let user: User = get_user_from_db(&database_config, &auth_user.user_id).await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::UNAUTHORIZED)?; // User no longer exists
+    // Debug logging
+    tracing::info!(
+        "Role check - User: {} ({}), Role: {:?}, Verified: {}, Required roles: {:?}, Require verified: {}",
+        auth_user.name,
+        auth_user.id,
+        auth_user.role,
+        auth_user.verified,
+        required_roles,
+        require_verified
+    );
 
-    // Check if user has required role
-    if !required_roles.contains(&user.role) {
+    // Check verification status if required
+    if require_verified && !auth_user.verified {
+        tracing::warn!(
+            "Unverified user {} attempted to access endpoint requiring verification",
+            auth_user.id
+        );
         return Err(StatusCode::FORBIDDEN);
     }
 
-    // Add full user info to extensions for handlers that need it
-    request.extensions_mut().insert(AuthenticatedUser::from(user));
+    // Check if user has required role
+    if !required_roles.contains(&auth_user.role) {
+        tracing::warn!(
+            "User {} with role {:?} attempted to access endpoint requiring {:?}",
+            auth_user.id,
+            auth_user.role,
+            required_roles
+        );
+        return Err(StatusCode::FORBIDDEN);
+    }
 
+    // All checks passed
+    tracing::debug!("Role check passed for user {}", auth_user.id);
     Ok(next.run(request).await)
 }
 
-// Helper function to get user from database
+/// Helper function to get user from database
 async fn get_user_from_db(
     database_config: &Arc<DatabaseConfig>,
     user_id: &str
@@ -116,9 +155,10 @@ async fn get_user_from_db(
     use crate::dto::user_dtos::UserQuery;
 
     // Parse user_id as UUID
-    let user_uuid = uuid::Uuid
-        ::parse_str(user_id)
-        .map_err(|_| ConfigError::Config("Invalid user id format".to_string()))?;
+    let user_uuid = uuid::Uuid::parse_str(user_id).map_err(|e| {
+        tracing::error!("Invalid UUID format for user_id {}: {}", user_id, e);
+        ConfigError::Config("Invalid user id format".to_string())
+    })?;
 
     // Get the database pool from your DatabaseConfig
     let pool = &database_config.pool;
@@ -130,34 +170,72 @@ async fn get_user_from_db(
 fn extract_token(request: &Request, cookies: &Cookies) -> Result<String, StatusCode> {
     // Try cookies first (access_token)
     if let Some(cookie) = cookies.get("access_token") {
+        tracing::debug!("Token found in cookies");
         return Ok(cookie.value().to_string());
     }
 
     // Fallback to Authorization header
-    request
+    let token = request
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|auth_header: &header::HeaderValue| auth_header.to_str().ok())
         .and_then(|auth_value: &str| {
-            if auth_value.starts_with("Bearer ") { Some(auth_value[7..].to_owned()) } else { None }
-        })
-        .ok_or(StatusCode::UNAUTHORIZED)
+            if auth_value.starts_with("Bearer ") { 
+                Some(auth_value[7..].to_owned()) 
+            } else { 
+                None 
+            }
+        });
+
+    match token {
+        Some(t) => {
+            tracing::debug!("Token found in Authorization header");
+            Ok(t)
+        },
+        None => {
+            tracing::warn!("No token found in cookies or Authorization header");
+            Err(StatusCode::UNAUTHORIZED)
+        }
+    }
 }
 
-/// Create role-specific middleware
-pub fn require_roles(
+/// Create role-specific middleware that requires verification
+pub fn require_verified_roles(
     roles: Vec<UserRole>
 ) -> impl (Fn(
-    Extension<Arc<AuthService>>,
-    Extension<Arc<DatabaseConfig>>,
     Request,
     Next
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Response, StatusCode>> + Send>>) +
     Clone {
-    move |auth_service, database_config, request, next| {
+    move |request, next| {
         let roles = roles.clone();
-        Box::pin(async move {
-            role_check_middleware(auth_service, database_config, request, next, roles).await
+        Box::pin(async move { 
+            role_check_middleware(request, next, roles, true).await 
         })
     }
+}
+
+/// Create role-specific middleware that doesn't require verification
+pub fn require_roles(
+    roles: Vec<UserRole>
+) -> impl (Fn(
+    Request,
+    Next
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Response, StatusCode>> + Send>>) +
+    Clone {
+    move |request, next| {
+        let roles = roles.clone();
+        Box::pin(async move { 
+            role_check_middleware(request, next, roles, false).await 
+        })
+    }
+}
+
+/// Convenience function for admin-only endpoints
+pub fn require_admin() -> impl (Fn(
+    Request,
+    Next
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Response, StatusCode>> + Send>>) +
+    Clone {
+    require_verified_roles(vec![UserRole::Admin])
 }
