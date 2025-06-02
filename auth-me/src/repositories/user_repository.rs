@@ -5,16 +5,19 @@ use chrono::{ NaiveDateTime, Utc };
 use crate::{
     config::{ ConfigError, database::PgPool },
     models::{ User, UserRole, UpdateUser, NewUser },
-    dto::{user_dtos::{
-        UserQuery,
-        UpdateUserRequest,
-        AdvancedUserFilters,
-        UserSortBy,
-        UserStatistics,
-        CreateUserRequest,
-    }, create_user_dtos::CreateUserParams},
+    dto::{
+        user_dtos::{
+            UserQuery,
+            UpdateUserRequest,
+            AdvancedUserFilters,
+            UserSortBy,
+            UserStatistics,
+            CreateUserRequest,
+        },
+        create_user_dtos::CreateUserParams,
+    },
     schema::users::{ self, dsl::* },
-    utils::token::AuthService
+    utils::token::AuthService,
 };
 
 pub struct UserRepository;
@@ -34,7 +37,7 @@ impl UserRepository {
             verified: request.verified,
             verification_token: token,
             token_expires_at: request.token_expires_at,
-            role: request.role,
+            role: request.role.unwrap_or(UserRole::User),
             created_by: request.created_by,
             force_password_change: request.force_password_change,
         };
@@ -119,6 +122,11 @@ impl UserRepository {
         };
 
         Ok(result)
+    }
+
+    /// Get user by ID specifically (helper method for admin validation)
+    pub fn get_user_by_id(pool: &PgPool, user_id: Uuid) -> Result<Option<User>, ConfigError> {
+        Self::get_user(pool, UserQuery::Id(user_id))
     }
 
     pub fn get_users_paginated(
