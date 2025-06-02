@@ -18,7 +18,7 @@ use serde_json::json;
 use chrono::{ Utc, Duration };
 use time::Duration as TimeDuration;
 
-use tracing::error;
+use tracing::{error, warn};
 use validator::Validate;
 
 use crate::{
@@ -46,7 +46,7 @@ use crate::{
     services::user_service::UserService,
 };
 
-/// Self-signup handler
+/// Self-signup handler - creates pending user with User role only
 pub async fn signup_handler(
     State(state): State<Arc<AppState>>,
     Json(signup_data): Json<SignupRequest>
@@ -56,14 +56,31 @@ pub async fn signup_handler(
         return Err(HttpError::validation_error(validation_errors.to_string()));
     }
 
+    // SECURITY: Log and warn if someone tries to signup with elevated roles
+    if let Some(requested_role) = &signup_data.role {
+        match requested_role {
+            UserRole::Admin | UserRole::Manager | UserRole::Moderator => {
+                warn!(
+                    "Attempted self-signup with elevated role '{}' for email: {} - Request blocked",
+                    requested_role.to_str(),
+                    signup_data.email
+                );
+            }
+            UserRole::User => {
+                // This is fine, no warning needed
+            }
+        }
+    }
+
     // Create pending user (this handles all validation and email sending)
+    // The service will automatically force the role to User regardless of request
     match UserService::create_pending_user_signup(signup_data, &state.config.database.pool).await {
         Ok(_pending_user) => {
             Ok(
                 Json(
                     serde_json::json!({
-                "message": "Please check your email and click the verification link to complete your registration."
-            })
+                        "message": "Please check your email and click the verification link to complete your registration. Your account will be created with standard user privileges."
+                    })
                 )
             )
         }
