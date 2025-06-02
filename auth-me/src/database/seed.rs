@@ -58,7 +58,7 @@ pub fn create_initial_admin(conn: &mut PgConnection) -> Result<(), Box<dyn std::
     println!("   Email: {}", admin_email);
     println!("   Username: {}", admin_username);
     println!("   ID: {}", created_user.id);
-    println!("   ⚠️  Please log in and change the password immediately!");
+    println!("⚠️ Please log in and change the password immediately!");
 
     Ok(())
 }
