@@ -1460,3 +1460,18 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 
 //     Ok(next.run(request).await)
 // }
+
+// ---------------------------------------------------- MAIN ----------------------------------------
+// use diesel::{ prelude::*, r2d2::{ ConnectionManager, Pool } };
+
+    // Initialize logger first
+    //     let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+    //     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(&rust_log)).init();
+
+    //     // Set up database connection pool
+//     let manager: ConnectionManager<PgConnection> = ConnectionManager::<PgConnection>::new(
+//         &config.database.database_url
+//     );
+//     let pool: Pool<ConnectionManager<PgConnection>> = Pool::builder()
+//         .build(manager)
+//         .map_err(|e| HttpError::server_error(format!("Failed to create pool: {}", e)))?;
