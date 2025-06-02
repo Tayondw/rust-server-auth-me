@@ -1,4 +1,4 @@
-use chrono::NaiveDateTime;
+use chrono::{NaiveDateTime, DateTime, Utc};
 use serde::{ Deserialize, Serialize };
 use core::str;
 use regex::Regex;
@@ -45,7 +45,7 @@ pub struct CreateUserRequest {
     #[serde(default)]
     pub verified: bool,
 
-    pub token_expires_at: Option<NaiveDateTime>,
+    pub token_expires_at: Option<DateTime<Utc>>,
 
     #[validate(custom = "validate_terms_acceptance")]
     pub terms_accepted: bool,
@@ -127,9 +127,9 @@ pub struct FilterUser {
     pub verified: bool,
     pub role: String,
     #[serde(rename = "createdAt")]
-    pub created_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>,
     #[serde(rename = "updatedAt")]
-    pub updated_at: NaiveDateTime,
+    pub updated_at: DateTime<Utc>,
 }
 
 impl FilterUser {
@@ -204,7 +204,7 @@ pub struct UpdateUserRequest {
     #[serde(default)]
     pub role: Option<UserRole>,
     #[serde(default, rename = "updatedAt")]
-    pub updated_at: Option<NaiveDateTime>,
+    pub updated_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

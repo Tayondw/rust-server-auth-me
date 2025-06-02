@@ -1,6 +1,6 @@
 use serde::{ Deserialize, Serialize };
 use validator::{ Validate, ValidationError };
-use chrono::NaiveDateTime;
+use chrono::{ DateTime, Utc };
 
 use crate::models::UserRole;
 
@@ -11,7 +11,7 @@ pub struct CreateUserParams {
     pub username: String,
     pub password: String,
     pub verified: bool,
-    pub token_expires_at: Option<NaiveDateTime>,
+    pub token_expires_at: Option<DateTime<Utc>>,
     pub role: UserRole,
     pub created_by: Option<uuid::Uuid>, // Track who created the user
     pub force_password_change: bool, // Force password change on first login
