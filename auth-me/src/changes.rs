@@ -1461,7 +1461,7 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 //     Ok(next.run(request).await)
 // }
 
-// ---------------------------------------------------- MAIN ----------------------------------------
+// ---------------------------------------------------- MAIN ---------------------------------------------------------------
 // use diesel::{ prelude::*, r2d2::{ ConnectionManager, Pool } };
 
     // Initialize logger first
@@ -1475,3 +1475,14 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 //     let pool: Pool<ConnectionManager<PgConnection>> = Pool::builder()
 //         .build(manager)
 //         .map_err(|e| HttpError::server_error(format!("Failed to create pool: {}", e)))?;
+
+// ------------------------------------------------ USER DTO -----------------------------------------------------------------
+// #[derive(Debug)]
+// pub enum UserQuery<'a> {
+//     Id(Uuid),
+//     Email(&'a str),
+//     Name(&'a str),
+//     Username(&'a str),
+//     Token(&'a str),
+//     Role(&'a str),
+// }

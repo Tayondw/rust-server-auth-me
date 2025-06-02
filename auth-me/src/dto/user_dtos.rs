@@ -50,7 +50,9 @@ pub struct CreateUserRequest {
     #[validate(custom = "validate_terms_acceptance")]
     pub terms_accepted: bool,
 
-    pub role: UserRole,
+    // SECURITY: Role field is optional and will be ignored for self-signup
+    // This allows the client to send it but we'll validate and ignore it
+    pub role: Option<UserRole>,
 
     pub created_by: Option<Uuid>,
 
@@ -76,12 +78,17 @@ fn validate_password_complexity(password: &str) -> Result<(), ValidationError> {
     Ok(())
 }
 
+// Regex for username validation (letters, numbers, underscores only
 lazy_static! {
     static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9_]+$").unwrap();
 }
 
+// Custom validator for terms acceptance
 fn validate_terms_acceptance(terms: &bool) -> Result<(), ValidationError> {
-    if *terms { Ok(()) } else { Err(ValidationError::new("Terms must be accepted")) }
+    if !terms {
+        return Err(validator::ValidationError::new("terms_not_accepted"));
+    }
+    Ok(())
 }
 
 /// Default to forcing password change for self-created users
@@ -89,24 +96,14 @@ fn default_force_password_change() -> bool {
     false
 }
 
-// #[derive(Debug)]
-// pub enum UserQuery<'a> {
-//     Id(Uuid),
-//     Email(&'a str),
-//     Name(&'a str),
-//     Username(&'a str),
-//     Token(&'a str),
-//     Role(&'a str),
-// }
-
 #[derive(Debug)]
 pub enum UserQuery {
     Id(Uuid),
-    Email(String), // Changed from &str to String
-    Name(String), // Changed from &str to String
-    Username(String), // Changed from &str to String
-    Token(String), // Changed from &str to String
-    Role(UserRole), // Changed from &str to UserRole
+    Email(String),
+    Name(String),
+    Username(String),
+    Token(String),
+    Role(UserRole),
 }
 
 #[derive(Serialize, Deserialize, Validate)]
