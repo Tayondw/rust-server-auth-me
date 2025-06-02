@@ -10,7 +10,7 @@ use diesel::{
     query_builder::QueryId,
 };
 use serde::{ Deserialize, Serialize };
-use chrono::NaiveDateTime;
+use chrono::{ DateTime, Utc };
 use uuid::Uuid;
 
 use crate::schema::{ users, sql_types::UserRole as UserRoleType };
@@ -73,12 +73,12 @@ pub struct User {
     pub password: String,
     pub verified: bool,
     pub verification_token: Option<String>,
-    pub token_expires_at: Option<NaiveDateTime>,
+    pub token_expires_at: Option<DateTime<Utc>>,
     pub role: UserRole,
     pub created_by: Option<Uuid>,
     pub force_password_change: bool,
-    pub created_at: Option<NaiveDateTime>,
-    pub updated_at: Option<NaiveDateTime>,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Insertable, Deserialize, Debug)]
@@ -90,7 +90,7 @@ pub struct NewUser {
     pub password: String,
     pub verified: bool,
     pub verification_token: Option<String>,
-    pub token_expires_at: Option<NaiveDateTime>,
+    pub token_expires_at: Option<DateTime<Utc>>,
     pub role: UserRole,
     pub created_by: Option<Uuid>,
     pub force_password_change: bool,
@@ -105,5 +105,5 @@ pub struct UpdateUser {
     pub password: String,
     pub verified: bool,
     pub role: UserRole,
-    pub updated_at: NaiveDateTime,
+    pub updated_at: DateTime<Utc>,
 }
