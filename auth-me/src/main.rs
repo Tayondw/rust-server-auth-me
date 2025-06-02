@@ -12,23 +12,25 @@ mod routes;
 mod repositories;
 mod services;
 
-use std::{ net::SocketAddr, sync::Arc };
-
-use axum::{ extract::Extension, middleware::from_fn, Router };
 use config::{ Config, logging::init_logging };
-use dotenvy::dotenv;
-use routes::create_router;
-use tower_http::{ cors::CorsLayer, trace::TraceLayer };
 use middleware::{
     csrf::{ csrf_middleware, TokenStore },
     cors::create_cors_layer,
     cookies::cookie_layer,
     security_headers::security_headers,
 };
+use routes::create_router;
+use database::seed::run_initial_setup;
 use errors::HttpError;
+
+use std::{ net::SocketAddr, sync::Arc };
+
+use axum::{ extract::Extension, middleware::from_fn, Router };
+use tokio::net::TcpListener;
+use dotenvy::dotenv;
+use tower_http::{ cors::CorsLayer, trace::TraceLayer };
 use tracing_subscriber;
 use tracing::info;
-use tokio::net::TcpListener;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -52,6 +54,15 @@ async fn main() -> Result<(), HttpError> {
     tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).try_init().ok();
 
     info!("Hello from main!");
+
+    // Run initial setup to create admin user if needed
+    info!("Running initial database setup...");
+    if let Err(e) = run_initial_setup() {
+        tracing::warn!("Initial setup failed: {}. This may be normal if admin already exists.", e);
+        // Don't panic here - the app can still run without this
+    } else {
+        info!("Initial setup completed successfully");
+    }
 
     // Determine environment
     let environment = std::env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string());
