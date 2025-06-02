@@ -85,6 +85,7 @@ impl UserService {
     }
 
     /// Create pending user via self-signup (requires email verification before actual user creation)
+    /// Self-signup users are ALWAYS created with User role for security
     pub async fn create_pending_user_signup(
         signup_data: SignupRequest,
         pool: &diesel::r2d2::Pool<diesel::r2d2::ConnectionManager<PgConnection>>
@@ -93,6 +94,22 @@ impl UserService {
 
         if let Err(validation_errors) = signup_data.validate() {
             return Err(HttpError::validation_error(validation_errors.to_string()));
+        }
+
+        // SECURITY: Validate that non-admin users cannot sign up with elevated roles
+        if let Some(requested_role) = &signup_data.role {
+            match requested_role {
+                UserRole::Admin | UserRole::Manager | UserRole::Moderator => {
+                    return Err(
+                        HttpError::unauthorized(
+                            "Self-signup is only allowed for regular user accounts. Administrative roles must be assigned by existing administrators.".to_string()
+                        )
+                    );
+                }
+                UserRole::User => {
+                    // This is fine, but we'll ignore it and force User role anyway
+                }
+            }
         }
 
         // Check if user already exists in both users and pending_users tables
@@ -125,6 +142,7 @@ impl UserService {
         let token_expiration = Utc::now().naive_utc() + Duration::hours(24);
 
         // Create pending user data
+        // SECURITY: Force role to User for all self-signups regardless of request
         let new_pending_user = NewPendingUser {
             name: signup_data.name,
             email: signup_data.email.clone(),
@@ -132,7 +150,7 @@ impl UserService {
             password: hashed_password,
             verification_token: verification_token.clone(),
             token_expires_at: token_expiration,
-            role: signup_data.role,
+            role: UserRole::User, // ALWAYS User for self-signup - NEVER trust client input for roles
             created_by: None, // Self-created
             force_password_change: false, // They chose their password
         };
@@ -192,6 +210,7 @@ impl UserService {
     }
 
     /// Create user via admin (can be pre-verified, different role)
+    /// SECURITY: This method requires admin authentication and can assign
     pub async fn create_user_admin(
         conn: &mut PgConnection,
         admin_request: AdminCreateUserRequest,
@@ -199,6 +218,42 @@ impl UserService {
         state: &Arc<AppState>
     ) -> Result<AdminCreateUserResponse, HttpError> {
         info!("Processing admin user creation for email: {}", admin_request.email);
+
+        // SECURITY: Verify that the requesting user is actually an admin
+        let admin_user = UserRepository::get_user_by_id(&state.config.database.pool, admin_user_id)
+            .map_err(|e| HttpError::server_error(e.to_string()))?
+            .ok_or_else(|| HttpError::unauthorized("Admin user not found".to_string()))?;
+
+        if admin_user.role != UserRole::Admin {
+            return Err(
+                HttpError::unauthorized(
+                    "Only administrators can create users with assigned roles".to_string()
+                )
+            );
+        }
+
+        // SECURITY: Additional validation for sensitive role assignments
+        match admin_request.role {
+            UserRole::Admin => {
+                // Extra logging for admin creation
+                info!(
+                    "Admin {} is creating a new admin user: {}",
+                    admin_user.email,
+                    admin_request.email
+                );
+            }
+            UserRole::Manager | UserRole::Moderator => {
+                info!(
+                    "Admin {} is creating a {} user: {}",
+                    admin_user.email,
+                    admin_request.role.to_str(),
+                    admin_request.email
+                );
+            }
+            UserRole::User => {
+                // Regular user creation
+            }
+        }
 
         // Check if user exists
         let (email_exists, username_exists) = UserRepository::check_user_exists(
@@ -245,7 +300,7 @@ impl UserService {
             password: hashed_password,
             verified: admin_request.verified,
             token_expires_at: token_expiration,
-            role: admin_request.role,
+            role: admin_request.role, // Admin can assign any role
             created_by: Some(admin_user_id),
             force_password_change: admin_request.force_password_change || is_temp_password,
         };
