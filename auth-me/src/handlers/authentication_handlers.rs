@@ -42,10 +42,7 @@ use crate::{
     models::{ User, UserRole },
     utils::{ password::hash, token::* },
     AppState,
-    repositories::{
-        user_repository::UserRepository,
-        pending_user_repository::PendingUserRepository,
-    },
+    repositories::{ user_repository::UserRepository },
     services::user_service::UserService,
 };
 
@@ -89,7 +86,7 @@ pub async fn verify_email_handler(
 
     // Step 3: Create actual user from pending user in transaction
     let mut conn = state.conn()?;
-    
+
     let pending_user_id = pending_user.id;
 
     let user_result = conn.transaction::<User, DieselError, _>(|conn| {
@@ -99,10 +96,7 @@ pub async fn verify_email_handler(
                 tokio::runtime::Handle
                     ::current()
                     .block_on(
-                        UserService::complete_user_registration_from_pending(
-                            conn,
-                            pending_user
-                        )
+                        UserService::complete_user_registration_from_pending(conn, pending_user)
                     )
             })
             .map_err(|_| DieselError::RollbackTransaction)?;
@@ -503,7 +497,7 @@ pub async fn reset_password(
         .ok_or_else(|| HttpError::bad_request(ErrorMessage::InvalidToken.to_string()))?;
 
     if let Some(expires_at) = user.token_expires_at {
-        if Utc::now().naive_utc() > expires_at {
+        if Utc::now() > expires_at {
             return Err(
                 HttpError::bad_request(ErrorMessage::VerificationTokenExpiredError.to_string())
             );
