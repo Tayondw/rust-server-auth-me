@@ -43,7 +43,7 @@ impl UserService {
         )?;
 
         // Set verification token to expire in 1 hour
-        let token_expiration = Utc::now().naive_utc() + Duration::hours(1);
+        let token_expiration = Utc::now() + Duration::hours(1);
 
         // Create user parameters for self-signup
         let params = CreateUserParams {
@@ -234,7 +234,7 @@ impl UserService {
         let token_expiration = if admin_request.verified {
             None
         } else {
-            Some(Utc::now().naive_utc() + Duration::hours(24)) // 24 hours for admin-created
+            Some(Utc::now() + Duration::hours(24)) // 24 hours for admin-created
         };
 
         // Create user parameters for admin creation
