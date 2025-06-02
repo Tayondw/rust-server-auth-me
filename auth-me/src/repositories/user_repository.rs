@@ -256,7 +256,7 @@ impl UserRepository {
         user_id: Uuid,
         update_data: UpdateUserRequest
     ) -> Result<User, ConfigError> {
-        let now = Utc::now().naive_utc();
+        let now = Utc::now();
 
         // First get the current user to fill in missing fields
         let current_user = users
@@ -289,7 +289,7 @@ impl UserRepository {
         update_data: UpdateUserRequest
     ) -> Result<User, ConfigError> {
         let mut conn = pool.get()?;
-        let now = Utc::now().naive_utc();
+        let now = Utc::now();
 
         // First get the current user
         let current_user = users
