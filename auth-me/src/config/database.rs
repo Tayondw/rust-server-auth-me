@@ -159,48 +159,67 @@ impl DatabaseConfig {
 
     /// Load from environment variables and build the config.
     pub fn new() -> Result<Self, ConfigError> {
+        // Helper function to get env var with better error messages
+        let get_env = |key: &str| -> Result<String, ConfigError> {
+            env::var(key).map_err(|_| {
+                ConfigError::Config(format!("Missing required environment variable: {}", key))
+            })
+        };
+
+        let get_env_parse = |key: &str| -> Result<i64, ConfigError> {
+            let val = get_env(key)?;
+            val.parse().map_err(|e| {
+                ConfigError::Config(format!("Failed to parse {} as integer: {}", key, e))
+            })
+        };
+
+        let get_env_parse_u16 = |key: &str| -> Result<u16, ConfigError> {
+            let val = get_env(key)?;
+            val.parse().map_err(|e| {
+                ConfigError::Config(format!("Failed to parse {} as u16: {}", key, e))
+            })
+        };
+
+        let get_env_parse_u32 = |key: &str| -> Result<u32, ConfigError> {
+            let val = get_env(key)?;
+            val.parse().map_err(|e| {
+                ConfigError::Config(format!("Failed to parse {} as u32: {}", key, e))
+            })
+        };
+
         let raw = RawDatabaseConfig {
-            database_url: env::var("DATABASE_URL")?,
-            jwt_secret: env::var("JWT_SECRET")?,
-            jwt_refresh_secret: env::var("JWT_REFRESH_SECRET")?,
-            rust_log: env::var("RUST_LOG")?,
-            schema: env::var("SCHEMA")?,
-            jwt_expires_in: env
-                ::var("JWT_EXPIRES_IN")?
-                .parse()
-                .map_err(|e| {
-                    ConfigError::Config(format!("Failed to parse JWT_EXPIRES_IN: {}", e))
-                })?,
-            jwt_refresh_expires_in: env
-                ::var("JWT_REFRESH_EXPIRES_IN")?
-                .parse()
-                .map_err(|e| {
-                    ConfigError::Config(format!("Failed to parse JWT_REFRESH_EXPIRES_IN: {}", e))
-                })?,
+            database_url: get_env("DATABASE_URL")?,
+            jwt_secret: get_env("JWT_SECRET")?,
+            jwt_refresh_secret: get_env("JWT_REFRESH_SECRET")?,
+            rust_log: get_env("RUST_LOG")?,
+            schema: get_env("SCHEMA")?,
+            jwt_expires_in: get_env_parse("JWT_EXPIRES_IN")?,
+            jwt_refresh_expires_in: get_env_parse("JWT_REFRESH_EXPIRES_IN")?,
             redis_url: env
                 ::var("REDIS_URL")
                 .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string()),
-            port: env::var("PORT")?.parse().unwrap_or(3000),
-            rate_limit_requests_per_minute: env::var("RATE_LIMIT_RPM")?.parse().unwrap_or(60),
+            port: env
+                ::var("PORT")
+                .map(|v| v.parse().unwrap_or(3000))
+                .unwrap_or(3000),
+            rate_limit_requests_per_minute: env
+                ::var("RATE_LIMIT_RPM")
+                .map(|v| v.parse().unwrap_or(60))
+                .unwrap_or(60),
             // SMTP config
-            smtp_server: env::var("SMTP_SERVER")?,
-            smtp_port: env
-                ::var("SMTP_PORT")?
-                .parse()
-                .map_err(|e| ConfigError::Config(format!("Failed to parse SMTP_PORT: {}", e)))?,
-            smtp_username: env::var("SMTP_USERNAME")?,
-            smtp_password: env::var("SMTP_PASSWORD")?,
-            smtp_from_address: env::var("SMTP_FROM_ADDRESS")?,
+            smtp_server: get_env("SMTP_SERVER")?,
+            smtp_port: get_env_parse_u16("SMTP_PORT")?,
+            smtp_username: get_env("SMTP_USERNAME")?,
+            smtp_password: get_env("SMTP_PASSWORD")?,
+            smtp_from_address: get_env("SMTP_FROM_ADDRESS")?,
             // AWS config
-            aws_s3_bucket_name: env::var("AWS_S3_BUCKET_NAME")?,
-            aws_s3_key: env::var("AWS_S3_KEY")?,
-            aws_s3_secret: env::var("AWS_S3_SECRET")?,
-            aws_region: env::var("AWS_REGION")?,
+            aws_s3_bucket_name: get_env("AWS_S3_BUCKET_NAME")?,
+            aws_s3_key: get_env("AWS_S3_KEY")?,
+            aws_s3_secret: get_env("AWS_S3_SECRET")?,
+            aws_region: get_env("AWS_REGION")?,
         };
 
-        DatabaseConfig::from_raw(raw).map_err(|e| {
-            ConfigError::Config(format!("Database pool creation failed: {}", e))
-        })
+        DatabaseConfig::from_raw(raw)
     }
 
     /// FOR TESTING PURPOSES

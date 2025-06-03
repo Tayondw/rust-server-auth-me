@@ -39,12 +39,19 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<(), HttpError> {
-    dotenv().ok();
+    // Load .env file first
+    match dotenv() {
+        Ok(path) => println!("Loaded .env from: {}", path.display()),
+        Err(e) => {
+            println!("Warning: Could not load .env file: {}. Using system environment variables.", e);
+        }
+    }
 
     init_logging();
 
     // Load configuration
     let config = Config::new().await.map_err(|e| {
+        eprintln!("Configuration loading failed: {}", e);
         HttpError::server_error(format!("Failed to load configuration: {}", e))
     })?;
 
