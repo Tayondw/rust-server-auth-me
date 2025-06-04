@@ -946,7 +946,7 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 //       rate_limit_requests_per_minute: 0,
 //   }
 
-// ------------------------------------ USER OPERATIONS -------------------------------
+// ---------------------------------------------------- USER OPERATIONS ------------------------------------------------------------
 // use diesel::prelude::*;
 // use uuid::Uuid;
 // use chrono::NaiveDateTime;
@@ -1023,7 +1023,7 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 //     Ok(())
 // }
 
-// ----------------------------- USER HANDLERS --------------------------
+// ------------------------------------------------------- USER HANDLERS -----------------------------------------------------
 
 // CREATE NEW USER
 // pub async fn create_user_handler(
@@ -1198,6 +1198,124 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 //     Ok(Json(response))
 // }
 
+/// UPDATE USER BY ID
+// pub async fn update_user_handler(
+//     State(state): State<Arc<AppState>>,
+//     Path(user_id): Path<Uuid>,
+//     Json(update_data): Json<UpdateUserRequest>
+// ) -> Result<Json<User>, HttpError> {
+//     let mut conn: PooledConnection<ConnectionManager<PgConnection>> = state.conn()?;
+
+//     UserRepository::update_user(&mut conn, user_id, update_data)
+//         .map(Json)
+//         .map_err(|_| HttpError::server_error(ErrorMessage::UserUpdateError.to_string()))
+// }
+
+/// UPDATE USER WITH CACHE INVALIDATION
+// pub async fn update_user(
+//     State(state): State<Arc<AppState>>,
+//     Path(user_id): Path<Uuid>,
+//     Extension(current_admin): Extension<AuthenticatedUser>,
+//     Json(update_data): Json<UpdateUserRequest>
+// ) -> Result<Json<SingleUserResponse>, HttpError> {
+//     // Get a connection from the pool
+//     let mut conn = state.conn()?;
+
+//     // Get the current user for cache invalidation comparison
+//     let old_user = UserRepository::get_user(&state.config.database.pool, UserQuery::Id(user_id))
+//         .map_err(|e| HttpError::server_error(e.to_string()))?
+//         .ok_or_else(||
+//             HttpError::new(ErrorMessage::UserNoLongerExists.to_string(), StatusCode::NOT_FOUND)
+//         )?;
+
+//     // Protection: Don't allow role changes unless explicitly intended
+//     // If no role is specified in the update, preserve the current role
+//     let mut protected_update_data = update_data;
+//     if protected_update_data.role.is_none() {
+//         protected_update_data.role = Some(old_user.role); // Explicitly preserve current role
+//     }
+
+//     // Additional protection: Log any admin role changes
+//     if old_user.role == UserRole::Admin && protected_update_data.role != Some(UserRole::Admin) {
+//         tracing::warn!(
+//             "Admin user {} role being changed from Admin to {:?} by user {}",
+//             user_id,
+//             protected_update_data.role,
+//             current_admin.id
+//         );
+//     }
+
+//     // Perform the update
+//     let updated_user = UserRepository::update_user(
+//         &mut conn,
+//         user_id,
+//         protected_update_data
+//     ).map_err(|e| HttpError::server_error(e.to_string()))?;
+
+//     // Create cache service and enhanced cache service from config
+//     let cache_service = CacheService::new(state.config.cache.clone());
+//     let enhanced_cache = EnhancedCacheService::new(cache_service);
+
+//     // Invalidate cache based on what changed
+//     if
+//         let Err(e) = enhanced_cache.invalidate_for_user_update(
+//             user_id,
+//             Some(&old_user),
+//             Some(&updated_user)
+//         ).await
+//     {
+//         // Log the error but don't fail the request
+//         tracing::warn!("Failed to invalidate cache after user update: {}", e);
+//     }
+
+//     let response = SingleUserResponse {
+//         status: "success".to_string(),
+//         data: UserData {
+//             user: FilterUser::filter_user(&updated_user),
+//         },
+//     };
+
+//     Ok(Json(response))
+// }
+
+/// DELETE USER WITH CACHE INVALIDATION
+// pub async fn delete_user_handler(
+//     State(state): State<Arc<AppState>>,
+//     Path(user_id): Path<Uuid>
+// ) -> Result<StatusCode, HttpError> {
+//     // Get the user before deletion for cache invalidation
+//     let user_to_delete = UserRepository::get_user(
+//         &state.config.database.pool,
+//         UserQuery::Id(user_id)
+//     )
+//         .map_err(|e| HttpError::server_error(e.to_string()))?
+//         .ok_or_else(||
+//             HttpError::new(ErrorMessage::UserNoLongerExists.to_string(), StatusCode::NOT_FOUND)
+//         )?;
+
+//     // Perform the deletion
+//     UserRepository::delete_user(&state.config.database.pool, user_id).map_err(|e|
+//         HttpError::server_error(e.to_string())
+//     )?;
+
+//     // Create cache service and enhanced cache service from config
+//     let cache_service = CacheService::new(state.config.cache.clone());
+//     let enhanced_cache = EnhancedCacheService::new(cache_service);
+
+//     // Invalidate all related cache entries
+//     if
+//         let Err(e) = enhanced_cache.invalidate_for_user_update(
+//             user_id,
+//             Some(&user_to_delete),
+//             None
+//         ).await
+//     {
+//         tracing::warn!("Failed to invalidate cache after user deletion: {}", e);
+//     }
+
+//     Ok(StatusCode::NO_CONTENT)
+// }
+
 // DELETE USER BY ID
 // pub async fn delete_user_handler(
 //     State(state): State<Arc<AppState>>,
@@ -1218,7 +1336,7 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 //     }
 // }
 
-// ------------------------------------ AUTHENTICATION HANDLERS ----------------------------
+// ----------------------------------------------------- AUTHENTICATION HANDLERS -------------------------------------------------------------
 // FROM SIGNUP HANDLER
 // Wrap in a transaction
 
@@ -1392,16 +1510,47 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 //             json!({
 //             "message": "Email verified successfully",
 //             "user_id": user.id,
-//             "creation_type": if user.created_by.is_some() { 
-//                 "AdminCreated" 
-//             } else { 
-//                 "SelfSignup" 
+//             "creation_type": if user.created_by.is_some() {
+//                 "AdminCreated"
+//             } else {
+//                 "SelfSignup"
 //             }
 //         })
 //         ),
 //     );
 
 //     Ok(response)
+// }
+
+// -------------------------------------------------- USER ROUTER --------------------------------------------------
+
+// .route_layer(middleware::from_fn(require_roles(vec![UserRole::Admin])))
+
+/// Protected user endpoints (authentication required)
+// pub fn user_routes() -> Router<Arc<AppState>> {
+//     Router::new()
+//         .route("/api/users", get(get_users).post(admin_create_user_handler))
+//         .route("/api/users/search", get(search_users))
+//         .route("/api/users/advanced-search", get(advanced_search_users))
+//         .route("/api/users/{id}", patch(update_user))
+//         .route("/api/users/{id}", get(get_user_by_id))
+//         .route("/api/users/{id}", delete(delete_user_handler))
+//         .layer(middleware::from_fn(require_admin()))
+//         .layer(middleware::from_fn(auth_middleware))
+// }
+
+/// Admin-only endpoints
+// pub fn admin_routes() -> Router<Arc<AppState>> {
+//     Router::new()
+//         .route("/api/admin/users", get(list_all_users))
+//         .route("/api/admin/users/bulk-delete", post(bulk_delete_users))
+//         .route("/api/admin/users/bulk-update-roles", post(bulk_update_user_roles))
+//         .route("/api/admin/users/bulk-verify", post(bulk_verify_users))
+//         .route("/api/admin/users/statistics", get(get_user_statistics))
+//         .route("/api/admin/users/cleanup-tokens", post(cleanup_expired_tokens))
+//         .route("/api/admin/settings", get(admin_settings))
+//         .route_layer(middleware::from_fn(require_roles(vec![UserRole::Admin])))
+//         .layer(middleware::from_fn(auth_middleware))
 // }
 
 // ----------------------------------------------- AUTH MIDDLEWARE ----------------------------------------------
@@ -1464,11 +1613,11 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 // ---------------------------------------------------- MAIN ---------------------------------------------------------------
 // use diesel::{ prelude::*, r2d2::{ ConnectionManager, Pool } };
 
-    // Initialize logger first
-    //     let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
-    //     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(&rust_log)).init();
+// Initialize logger first
+//     let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+//     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(&rust_log)).init();
 
-    //     // Set up database connection pool
+//     // Set up database connection pool
 //     let manager: ConnectionManager<PgConnection> = ConnectionManager::<PgConnection>::new(
 //         &config.database.database_url
 //     );
