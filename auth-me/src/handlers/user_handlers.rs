@@ -7,12 +7,7 @@ use axum::{
     response::IntoResponse,
     Extension,
 };
-use diesel::{
-    prelude::*,
-    r2d2::{ PooledConnection, ConnectionManager },
-    PgConnection,
-    result::Error as DieselError,
-};
+use diesel::{ prelude::*, result::Error as DieselError };
 use uuid::Uuid;
 use tracing::{ info, error };
 use serde_json::{ json, Value };
@@ -22,7 +17,7 @@ use validator::Validate;
 use crate::{
     config::ConfigError,
     database::DbConnExt,
-    models::{ User, UserRole },
+    models::UserRole,
     middleware::auth::AuthenticatedUser,
     dto::{
         user_dtos::{
@@ -39,7 +34,6 @@ use crate::{
             DeleteUserResponse,
         },
         create_user_dtos::{ AdminCreateUserRequest, AdminCreateUserResponse },
-        authentication_dtos::ResetPasswordRequest,
         Response,
     },
     errors::{ ErrorMessage, HttpError },
