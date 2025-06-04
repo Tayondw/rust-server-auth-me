@@ -1,4 +1,3 @@
-use axum::http::StatusCode;
 use chrono::{ NaiveDateTime, DateTime, Utc };
 use serde::{ Deserialize, Serialize };
 use core::str;
@@ -101,10 +100,7 @@ fn default_force_password_change() -> bool {
 pub enum UserQuery {
     Id(Uuid),
     Email(String),
-    Name(String),
-    Username(String),
     Token(String),
-    Role(UserRole),
 }
 
 #[derive(Serialize, Deserialize, Validate)]
