@@ -1,4 +1,5 @@
-use chrono::{NaiveDateTime, DateTime, Utc};
+use axum::http::StatusCode;
+use chrono::{ NaiveDateTime, DateTime, Utc };
 use serde::{ Deserialize, Serialize };
 use core::str;
 use regex::Regex;
@@ -188,20 +189,66 @@ pub struct SingleUserResponse {
 #[derive(Deserialize, Validate, Debug)]
 pub struct UpdateUserRequest {
     #[serde(default)]
-    #[validate(length(min = 1, max = 100))]
+    #[validate(
+        length(min = 1, message = "Name is required"),
+        length(max = 25, message = "Name cannot be longer than 25 characters")
+    )]
     pub name: Option<String>,
-    #[serde(default)] // This makes the field optional in JSON
+
+    #[serde(default)]
+    #[validate(length(min = 1, message = "Email is required"), email(message = "Email is invalid"))]
     pub email: Option<String>,
+
     #[serde(default)]
+    #[validate(
+        length(min = 1, message = "Username is required"),
+        length(max = 25, message = "Username cannot be longer than 25 characters"),
+        regex(
+            path = "USERNAME_REGEX",
+            message = "Username can only contain letters, numbers, and underscores"
+        )
+    )]
     pub username: Option<String>,
+
     #[serde(default)]
+    #[validate(
+        length(min = 8, max = 25, message = "Password must be between 8 and 25 characters"),
+        custom = "validate_password_complexity"
+    )]
     pub password: Option<String>,
+
     #[serde(default)]
     pub verified: Option<bool>,
+
     #[serde(default)]
     pub role: Option<UserRole>,
+
     #[serde(default, rename = "updatedAt")]
     pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct ChangePasswordRequest {
+    #[validate(length(min = 1, message = "Please enter your password"))]
+    pub current_password: String,
+
+    #[validate(
+      length(min = 8, max = 25, message = "Password must be between 8 and 25 characters"),
+      custom = "validate_password_complexity"
+  )]
+    pub new_password: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct SelfDeleteRequest {
+    #[validate(length(min = 1, message = "Please enter your password"))]
+    pub password: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DeleteUserResponse {
+    pub message: String,
+    pub status: u16,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
