@@ -364,6 +364,7 @@ dependencies = [
  "log",
  "rand 0.9.0",
  "redis",
+ "redis-cli",
  "regex",
  "ring",
  "serde",
@@ -776,6 +777,7 @@ dependencies = [
  "textwrap",
  "unicode-width",
  "vec_map",
+ "yaml-rust",
 ]
 
 [[package]]
@@ -2866,6 +2868,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "redis-cli"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d9f99077fc32cd56579b3402b73982bb958b4ac0266b62c2f59fe4d0e7fa620"
+dependencies = [
+ "clap",
+ "resp",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2928,6 +2940,12 @@ name = "regex-syntax"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
+
+[[package]]
+name = "resp"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "488aa0721fc6071b8878705efcb231dd9cccb641b905b439cd9fb8040977c172"
 
 [[package]]
 name = "ring"
@@ -4243,6 +4261,12 @@ dependencies = [
  "libc",
  "windows-sys 0.59.0",
 ]
+
+[[package]]
+name = "yaml-rust"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e66366e18dc58b46801afbf2ca7661a9f59cc8c5962c29892b6039b4f86fa992"
 
 [[package]]
 name = "yoke"
