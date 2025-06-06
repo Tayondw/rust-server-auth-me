@@ -52,6 +52,26 @@ const USER_LIST_CACHE_TTL: u64 = 60; // 1 minute
 const SEARCH_CACHE_TTL: u64 = 30; // 30 seconds
 
 /// GET ALL USERS
+/// # Path Parameters  
+/// - `user_id`: UUID of the target user
+/// 
+/// # Cache Strategy
+/// - Cache key pattern: `user:{uuid}`
+/// - TTL: `USER_CACHE_TTL`
+/// - Multi-dimensional tags:
+///   - `user:{id}` - Individual user invalidation
+///   - `role:{role}` - Role-based bulk invalidation  
+///   - `verified:{status}` - Verification status invalidation
+/// 
+/// # Returns
+/// - `200 OK`: User data wrapped in success response
+/// - `404 Not Found`: User does not exist or was deleted
+/// - `500 Internal Server Error`: Database or cache failures
+/// 
+/// # Error Handling
+/// - Distinguishes between database errors and missing records
+/// - Provides consistent error messages via `ErrorMessage` enum
+/// - Graceful fallback from cache misses to database queries
 pub async fn get_users(
     Query(query_params): Query<RequestQuery>,
     State(state): State<Arc<AppState>>
