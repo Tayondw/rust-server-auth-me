@@ -16,7 +16,7 @@ use validator::Validate;
 
 use crate::{
     config::ConfigError,
-    database::DbConnExt,
+    connection::DbConnExt,
     models::UserRole,
     middleware::auth::AuthenticatedUser,
     dto::{
