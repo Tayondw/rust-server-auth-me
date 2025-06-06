@@ -180,13 +180,6 @@ impl DatabaseConfig {
             })
         };
 
-        let get_env_parse_u32 = |key: &str| -> Result<u32, ConfigError> {
-            let val = get_env(key)?;
-            val.parse().map_err(|e| {
-                ConfigError::Config(format!("Failed to parse {} as u32: {}", key, e))
-            })
-        };
-
         let raw = RawDatabaseConfig {
             database_url: get_env("DATABASE_URL")?,
             jwt_secret: get_env("JWT_SECRET")?,
