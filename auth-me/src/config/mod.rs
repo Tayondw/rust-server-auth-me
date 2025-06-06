@@ -2,6 +2,7 @@
 pub mod database;
 pub mod cache;
 pub mod logging;
+pub mod email;
 
 // use aws::AwsConfig;
 pub use database::{ DatabaseConfig, ConfigError };
