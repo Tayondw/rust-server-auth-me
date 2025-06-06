@@ -204,7 +204,31 @@ pub async fn get_user_by_id(
 
 // ================================= SELF-MANAGEMENT HANDLERS ==========================================
 
-/// GET CURRENT USER - User getting their own profile
+/// GET CURRENT USER
+/// Retrieves the current authenticated user's profile information.
+///
+/// This endpoint allows users to fetch their own profile data with caching support
+/// for improved performance. The response includes filtered user information that
+/// excludes sensitive fields like password hashes.
+///
+/// # Arguments
+/// * `state` - Application state containing database pool and configuration
+/// * `auth_user` - Authenticated user extracted from JWT token
+///
+/// # Returns
+/// * `Ok(Json<SingleUserResponse>)` - User profile data on success
+/// * `Err(HttpError)` - Various error types:
+///   - `500` - Database connection or query failures
+///   - `404` - User not found (shouldn't happen for authenticated users)
+///
+/// # Caching
+/// - Cache key: `user:{user_id}`
+/// - TTL: `USER_CACHE_TTL`
+/// - Cache tags: `["user:{user_id}"]`
+///
+/// # Security
+/// - Requires valid authentication token
+/// - Users can only access their own profile
 pub async fn get_current_user(
     State(state): State<Arc<AppState>>,
     Extension(auth_user): Extension<AuthenticatedUser>
