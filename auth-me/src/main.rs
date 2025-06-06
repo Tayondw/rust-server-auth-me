@@ -3,7 +3,7 @@ mod models;
 mod schema;
 mod dto;
 mod errors;
-mod database;
+mod connection;
 mod middleware;
 mod email;
 mod utils;
@@ -20,7 +20,7 @@ use middleware::{
     security_headers::security_headers,
 };
 use routes::create_router;
-use database::seed::run_initial_setup;
+use connection::seed::run_initial_setup;
 use errors::HttpError;
 
 use std::{ net::SocketAddr, sync::Arc };
