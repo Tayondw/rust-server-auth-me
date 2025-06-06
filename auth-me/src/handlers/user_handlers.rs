@@ -202,7 +202,7 @@ pub async fn get_user_by_id(
     Ok(Json(response))
 }
 
-// ================================= SELF-MANAGEMENT HANDLERS ==========================================
+// ================================================= SELF-MANAGEMENT HANDLERS ===================================================
 
 /// GET CURRENT USER
 /// Retrieves the current authenticated user's profile information.
@@ -267,7 +267,44 @@ pub async fn get_current_user(
     Ok(Json(response))
 }
 
-/// UPDATE CURRENT USER - User updating their own profile
+/// UPDATE CURRENT USER
+/// Updates the current authenticated user's profile information.
+///
+/// This endpoint allows users to modify their own profile data including name, email,
+/// username, and password. Certain fields like role and verification status cannot
+/// be modified by users themselves and require admin privileges.
+///
+/// # Arguments
+/// * `state` - Application state containing database pool and configuration
+/// * `auth_user` - Authenticated user extracted from JWT token
+/// * `update_data` - JSON payload containing fields to update
+///
+/// # Request Body
+/// ```json
+/// {
+///   "name": "New Name",           // Optional
+///   "email": "new@example.com",   // Optional
+///   "username": "newusername",    // Optional
+///   "password": "newpassword"     // Optional, will be hashed
+/// }
+/// ```
+///
+/// # Returns
+/// * `Ok(Json<SingleUserResponse>)` - Updated user profile data
+/// * `Err(HttpError)` - Various error types:
+///   - `400` - Validation errors or password hashing failures
+///   - `404` - User not found
+///   - `500` - Database connection or query failures
+///
+/// # Security
+/// - Requires valid authentication token
+/// - Users can only update their own profile
+/// - Passwords are automatically hashed before storage
+/// - Role and verification status are ignored in self-updates
+///
+/// # Cache Invalidation
+/// - Invalidates user-specific cache entries
+/// - Compares old and new user data for targeted invalidation
 pub async fn update_current_user(
     State(state): State<Arc<AppState>>,
     Extension(auth_user): Extension<AuthenticatedUser>,
@@ -336,7 +373,42 @@ pub async fn update_current_user(
     Ok(Json(response))
 }
 
-/// DELETE CURRENT USER - User deleting their own account
+/// DELETE CURRENT USER
+/// Deletes the current authenticated user's account.
+///
+/// This endpoint allows users to permanently delete their own account. The operation
+/// requires password confirmation for security and includes special handling for admin
+/// users to prevent deletion of the last admin account.
+///
+/// # Arguments
+/// * `state` - Application state containing database pool and configuration
+/// * `auth_user` - Authenticated user extracted from JWT token
+/// * `delete_request` - JSON payload containing password confirmation
+///
+/// # Request Body
+/// ```json
+/// {
+///   "password": "current_password"  // Required for confirmation
+/// }
+/// ```
+///
+/// # Returns
+/// * `Ok(Json<DeleteUserResponse>)` - Success confirmation with 204 status
+/// * `Err(HttpError)` - Various error types:
+///   - `400` - Password verification failed or last admin deletion attempt
+///   - `401` - Invalid password provided
+///   - `404` - User not found
+///   - `500` - Database connection or query failures
+///
+/// # Security
+/// - Requires valid authentication token
+/// - Requires current password confirmation
+/// - Prevents deletion of the last admin user
+/// - Permanently removes user data from database
+///
+/// # Cache Invalidation
+/// - Invalidates all user-related cache entries
+/// - Handles cleanup for deleted user data
 pub async fn delete_current_user(
     State(state): State<Arc<AppState>>,
     Extension(auth_user): Extension<AuthenticatedUser>,
@@ -401,7 +473,43 @@ pub async fn delete_current_user(
     )
 }
 
-/// CHANGE CURRENT USER PASSWORD - User changing their own password
+/// CHANGE CURRENT USER PASSWORD
+/// Changes the current authenticated user's password.
+///
+/// This endpoint allows users to update their password by providing both their current
+/// password for verification and a new password. The operation includes automatic
+/// cleanup of any forced password change flags.
+///
+/// # Arguments
+/// * `state` - Application state containing database pool and configuration
+/// * `auth_user` - Authenticated user extracted from JWT token
+/// * `password_change` - JSON payload containing current and new passwords
+///
+/// # Request Body
+/// ```json
+/// {
+///   "current_password": "old_password",  // Required for verification
+///   "new_password": "new_password"       // Required, will be hashed
+/// }
+/// ```
+///
+/// # Returns
+/// * `Ok(Json<Response>)` - Success confirmation message
+/// * `Err(HttpError)` - Various error types:
+///   - `400` - Validation errors or password hashing failures
+///   - `401` - Invalid current password
+///   - `404` - User not found
+///   - `500` - Database connection or query failures
+///
+/// # Security
+/// - Requires valid authentication token
+/// - Verifies current password before allowing change
+/// - New password is automatically hashed using secure algorithm
+/// - Clears any `force_password_change` flags after successful update
+///
+/// # Side Effects
+/// - Automatically clears `force_password_change` flag if set
+/// - Logs password change event for audit purposes
 pub async fn change_current_user_password(
     State(state): State<Arc<AppState>>,
     Extension(auth_user): Extension<AuthenticatedUser>,
@@ -464,9 +572,147 @@ pub async fn change_current_user_password(
     )
 }
 
-// ============================================= ADMIN MANAGEMENT HANDLERS =================================================================
+// ============================================= ADMIN MANAGEMENT HANDLERS ================================================================
+/// Admin user creation handler
+/// Creates a new user account through admin interface.
+///
+/// This endpoint allows administrators to create new user accounts with full control
+/// over user properties including role assignment and verification status. The operation
+/// is performed within a database transaction to ensure data consistency.
+///
+/// # Arguments
+/// * `state` - Application state containing database pool and configuration
+/// * `auth_user` - Authenticated admin user extracted from JWT token
+/// * `admin_request` - JSON payload containing new user data
+///
+/// # Request Body
+/// ```json
+/// {
+///   "name": "John Doe",
+///   "email": "john@example.com",
+///   "username": "johndoe",
+///   "password": "secure_password",
+///   "role": "User",              // Admin, Manager, or User
+///   "verified": true             // Email verification status
+/// }
+/// ```
+///
+/// # Returns
+/// * `Ok(Json<AdminCreateUserResponse>)` - Created user information with ID
+/// * `Err(HttpError)` - Various error types:
+///   - `400` - Validation errors or duplicate data
+///   - `401` - Insufficient privileges or invalid role assignment
+///   - `500` - Database transaction or connection failures
+///
+/// # Security
+/// - Requires admin or manager role authentication
+/// - Validates role creation permissions based on requesting user's role
+/// - Password is automatically hashed before storage
+/// - All actions are logged for audit purposes
+///
+/// # Transaction Safety
+/// - Uses database transaction to ensure atomicity
+/// - Rollback on any failure during user creation process
+/// - Includes service layer validation and business logic
+///
+/// # Cache Impact
+/// - Invalidates relevant user search and list caches
+/// - Updates role-based cache tags
+pub async fn admin_create_user_handler(
+    State(state): State<Arc<AppState>>,
+    Extension(auth_user): Extension<AuthenticatedUser>,
+    Json(admin_request): Json<AdminCreateUserRequest>
+) -> Result<impl IntoResponse, HttpError> {
+    // Validate input
+    if let Err(validation_errors) = admin_request.validate() {
+        return Err(HttpError::validation_error(validation_errors.to_string()));
+    }
 
-/// ADMIN UPDATE USER - Admin updating another user
+    // Check permissions
+    if !UserService::can_create_users(&auth_user.role) {
+        return Err(HttpError::unauthorized(ErrorMessage::PermissionDenied.to_string()));
+    }
+
+    // Validate role creation permissions
+    UserService::validate_admin_creation_permissions(&auth_user.role, &admin_request.role).map_err(
+        |e| HttpError::unauthorized(e.to_string())
+    )?;
+
+    let mut conn = state.conn()?;
+
+    // Use transaction for user creation
+    let creation_result = conn.transaction::<AdminCreateUserResponse, DieselError, _>(|conn| {
+        // Use the service layer for admin user creation
+        let response = tokio::task
+            ::block_in_place(move || {
+                tokio::runtime::Handle
+                    ::current()
+                    .block_on(
+                        UserService::create_user_admin(conn, admin_request, auth_user.id, &state)
+                    )
+            })
+            .map_err(|_| DieselError::RollbackTransaction)?;
+
+        Ok(response)
+    });
+
+    match creation_result {
+        Ok(response) => {
+            info!("Admin {} created user {}", auth_user.id, response.user_id);
+            Ok(Json(response))
+        }
+        Err(DieselError::RollbackTransaction) => {
+            Err(HttpError::server_error("Failed to create user".to_string()))
+        }
+        Err(e) => {
+            error!("Database error during admin user creation: {}", e);
+            Err(HttpError::server_error("Failed to create user".to_string()))
+        }
+    }
+}
+
+/// ADMIN UPDATE USER
+/// Updates another user's profile information (Admin only).
+///
+/// This endpoint allows administrators to modify any user's profile data including
+/// sensitive fields like role and verification status. Includes safeguards to prevent
+/// removal of the last admin and self-modification through admin endpoints.
+///
+/// # Arguments
+/// * `state` - Application state containing database pool and configuration
+/// * `user_id` - UUID of the user to update (from URL path)
+/// * `admin_user` - Authenticated admin user extracted from JWT token
+/// * `update_data` - JSON payload containing fields to update
+///
+/// # Request Body
+/// ```json
+/// {
+///   "name": "New Name",           // Optional
+///   "email": "new@example.com",   // Optional
+///   "username": "newusername",    // Optional
+///   "password": "newpassword",    // Optional, will be hashed
+///   "role": "Admin",              // Optional, Admin/Manager/User
+///   "verified": true              // Optional, email verification status
+/// }
+/// ```
+///
+/// # Returns
+/// * `Ok(Json<SingleUserResponse>)` - Updated user profile data
+/// * `Err(HttpError)` - Various error types:
+///   - `400` - Validation errors, self-update attempt, or last admin protection
+///   - `401` - Insufficient admin privileges
+///   - `404` - Target user not found
+///   - `500` - Database connection or query failures
+///
+/// # Security
+/// - Requires admin role authentication
+/// - Prevents admin from updating themselves through this endpoint
+/// - Protects against removal of last admin user
+/// - Logs all admin actions for audit purposes
+///
+/// # Cache Invalidation
+/// - Invalidates user-specific and role-based cache entries
+/// - Compares old and new user data for targeted invalidation
 pub async fn admin_update_user(
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<Uuid>,
@@ -575,7 +821,37 @@ pub async fn admin_update_user(
     Ok(Json(response))
 }
 
-/// ADMIN DELETE USER - Admin deleting another user
+/// ADMIN DELETE USER
+/// Deletes another user's account (Admin only).
+///
+/// This endpoint allows administrators to permanently delete any user account except
+/// their own. Includes safeguards to prevent deletion of the last admin user and
+/// maintains system integrity.
+///
+/// # Arguments
+/// * `state` - Application state containing database pool and configuration
+/// * `user_id` - UUID of the user to delete (from URL path)
+/// * `admin_user` - Authenticated admin user extracted from JWT token
+///
+/// # Returns
+/// * `Ok(Json<DeleteUserResponse>)` - Success confirmation with 204 status
+/// * `Err(HttpError)` - Various error types:
+///   - `400` - Self-deletion attempt or last admin protection
+///   - `401` - Insufficient admin privileges
+///   - `404` - Target user not found
+///   - `500` - Database connection or query failures
+///
+/// # Security
+/// - Requires admin role authentication
+/// - Prevents admin from deleting themselves
+/// - Protects against deletion of last admin user
+/// - Permanently removes user data from database
+/// - Logs all deletion actions for audit purposes
+///
+/// # Cache Invalidation
+/// - Invalidates all user-related cache entries
+/// - Handles cleanup for deleted user data
+/// - Updates role-based and search caches
 pub async fn admin_delete_user(
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<Uuid>,
@@ -646,7 +922,57 @@ pub async fn admin_delete_user(
     )
 }
 
-// SEARCH USERS - Advanced filtering w/ caching
+/// SEARCH USERS
+/// Searches and filters users with advanced criteria and caching.
+///
+/// This endpoint provides comprehensive user search functionality with support for
+/// text search, role filtering, verification status filtering, and pagination. Results
+/// are cached for improved performance on repeated queries.
+///
+/// # Arguments
+/// * `query_params` - URL query parameters for search and filtering
+/// * `state` - Application state containing database pool and configuration
+///
+/// # Query Parameters
+/// - `page` - Page number for pagination (default: 1)
+/// - `limit` - Number of results per page (default: 10)
+/// - `search` - Text search across name, email, and username fields
+/// - `role` - Filter by user role (Admin, Manager, User)
+/// - `verified` - Filter by email verification status (true/false)
+///
+/// # Example Usage
+/// ```
+/// GET /users/search?page=1&limit=20&search=john&role=User&verified=true
+/// ```
+///
+/// # Returns
+/// * `Ok(Json<UserListResponse>)` - Paginated list of filtered users
+/// * `Err(HttpError)` - Various error types:
+///   - `400` - Invalid query parameters or validation errors
+///   - `500` - Database connection or query failures
+///
+/// # Response Format
+/// ```json
+/// {
+///   "status": "success",
+///   "users": [...],
+///   "results": 50,
+///   "page": 1,
+///   "limit": 20,
+///   "total_pages": 3
+/// }
+/// ```
+///
+/// # Caching
+/// - Cache key includes all search parameters for unique identification
+/// - TTL: `SEARCH_CACHE_TTL`
+/// - Tags: `["users_search", "role:{role}", "verified:{status}"]`
+/// - Automatic invalidation when user data changes
+///
+/// # Security
+/// - No authentication required for basic user search
+/// - Filtered user data excludes sensitive information
+/// - Search results are paginated to prevent data dumping
 pub async fn search_users(
     Query(query_params): Query<UserSearchQuery>,
     State(state): State<Arc<AppState>>
@@ -718,60 +1044,49 @@ pub async fn search_users(
     Ok(Json(response))
 }
 
-/// Admin user creation handler
-pub async fn admin_create_user_handler(
-    State(state): State<Arc<AppState>>,
-    Extension(auth_user): Extension<AuthenticatedUser>,
-    Json(admin_request): Json<AdminCreateUserRequest>
-) -> Result<impl IntoResponse, HttpError> {
-    // Validate input
-    if let Err(validation_errors) = admin_request.validate() {
-        return Err(HttpError::validation_error(validation_errors.to_string()));
-    }
-
-    // Check permissions
-    if !UserService::can_create_users(&auth_user.role) {
-        return Err(HttpError::unauthorized(ErrorMessage::PermissionDenied.to_string()));
-    }
-
-    // Validate role creation permissions
-    UserService::validate_admin_creation_permissions(&auth_user.role, &admin_request.role).map_err(
-        |e| HttpError::unauthorized(e.to_string())
-    )?;
-
-    let mut conn = state.conn()?;
-
-    // Use transaction for user creation
-    let creation_result = conn.transaction::<AdminCreateUserResponse, DieselError, _>(|conn| {
-        // Use the service layer for admin user creation
-        let response = tokio::task
-            ::block_in_place(move || {
-                tokio::runtime::Handle
-                    ::current()
-                    .block_on(
-                        UserService::create_user_admin(conn, admin_request, auth_user.id, &state)
-                    )
-            })
-            .map_err(|_| DieselError::RollbackTransaction)?;
-
-        Ok(response)
-    });
-
-    match creation_result {
-        Ok(response) => {
-            info!("Admin {} created user {}", auth_user.id, response.user_id);
-            Ok(Json(response))
-        }
-        Err(DieselError::RollbackTransaction) => {
-            Err(HttpError::server_error("Failed to create user".to_string()))
-        }
-        Err(e) => {
-            error!("Database error during admin user creation: {}", e);
-            Err(HttpError::server_error("Failed to create user".to_string()))
-        }
-    }
-}
-
+/// LIST USERS
+/// Retrieves a basic list of users for manager-level access.
+///
+/// This endpoint provides a simplified user listing with limited information suitable
+/// for managers who need basic user oversight capabilities. The response excludes
+/// sensitive user data and administrative details.
+///
+/// # Arguments
+/// * `state` - Application state containing database pool and configuration
+///
+/// # Returns
+/// * `Ok(Json<Value>)` - Basic user list with limited fields
+/// * `Err(HttpError)` - Various error types:
+///   - `500` - Database connection or query failures
+///
+/// # Response Format
+/// ```json
+/// {
+///   "users": [
+///     {
+///       "id": 1,
+///       "email": "user@example.com",
+///       "role": "User",
+///       "active": true
+///     }
+///   ],
+///   "total_count": 2
+/// }
+/// ```
+///
+/// # Security
+/// - Currently returns mock data for demonstration
+/// - Intended for manager-level access with restricted information
+/// - Excludes sensitive fields like creation dates, last login, etc.
+/// - Future implementation should include proper authentication checks
+///
+/// # Note
+/// This is currently a placeholder implementation returning static mock data.
+/// Production implementation should include:
+/// - Proper authentication and authorization checks
+/// - Database queries with appropriate filtering
+/// - Pagination support for large user sets
+/// - Caching for improved performance
 pub async fn list_users(State(_state): State<Arc<AppState>>) -> Result<Json<Value>, HttpError> {
     // Basic user list for managers - limited info
     let users =
@@ -796,6 +1111,60 @@ pub async fn list_users(State(_state): State<Arc<AppState>>) -> Result<Json<Valu
     Ok(Json(users))
 }
 
+/// LIST ALL USERS
+/// Retrieves a comprehensive list of all users for admin-level access.
+///
+/// This endpoint provides detailed user information including sensitive administrative
+/// data such as creation dates, last login times, and verification status. This
+/// comprehensive view is intended for full administrative oversight and user management.
+///
+/// # Arguments
+/// * `state` - Application state containing database pool and configuration
+///
+/// # Returns
+/// * `Ok(Json<Value>)` - Comprehensive user list with full details
+/// * `Err(HttpError)` - Various error types:
+///   - `500` - Database connection or query failures
+///
+/// # Response Format
+/// ```json
+/// {
+///   "users": [
+///     {
+///       "id": 1,
+///       "email": "user@example.com",
+///       "role": "User",
+///       "active": true,
+///       "created_at": "2024-01-10T08:00:00Z",
+///       "last_login": "2024-01-20T14:30:00Z",
+///       "email_verified": true
+///     }
+///   ],
+///   "total_count": 3,
+///   "admin_count": 1,
+///   "active_count": 3
+/// }
+/// ```
+///
+/// # Security
+/// - Currently returns mock data for demonstration
+/// - Intended for admin-only access with full user details
+/// - Includes sensitive information like timestamps and verification status
+/// - Future implementation should include strict admin authentication
+///
+/// # Additional Metrics
+/// - Provides summary statistics (total_count, admin_count, active_count)
+/// - Useful for administrative dashboards and user management interfaces
+/// - Helps admins understand user base composition and activity
+///
+/// # Note
+/// This is currently a placeholder implementation returning static mock data.
+/// Production implementation should include:
+/// - Strict admin authentication and authorization
+/// - Real database queries with proper error handling
+/// - Pagination support for large user databases
+/// - Caching with appropriate cache invalidation strategies
+/// - Audit logging for admin access to sensitive user data
 pub async fn list_all_users(State(_state): State<Arc<AppState>>) -> Result<Json<Value>, HttpError> {
     // Full user list for admins - includes sensitive info
     let users =
