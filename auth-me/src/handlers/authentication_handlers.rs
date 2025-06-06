@@ -23,7 +23,7 @@ use validator::Validate;
 
 use crate::{
     middleware::auth::{ AuthUser, AuthenticatedUser },
-    database::DbConnExt,
+    connection::DbConnExt,
     dto::{
         authentication_dtos::{
             ForgotPasswordRequest,
