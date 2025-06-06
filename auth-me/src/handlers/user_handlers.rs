@@ -123,6 +123,32 @@ pub async fn get_users(
 }
 
 /// GET USER BY ID
+/// Fetches a specific user by their id with caching
+/// 
+/// This endpoint implements caching with multiple tag dimensions
+/// (user ID, role, verification status) enabling precise cache invalidation
+/// when user attributes change. Returns filtered user data for security.
+/// 
+/// # Path Parameters  
+/// - `user_id`: UUID of the target user
+/// 
+/// # Cache Strategy
+/// - Cache key pattern: `user:{uuid}`
+/// - TTL: `USER_CACHE_TTL`
+/// - Multi-dimensional tags:
+///   - `user:{id}` - Individual user invalidation
+///   - `role:{role}` - Role-based bulk invalidation  
+///   - `verified:{status}` - Verification status invalidation
+/// 
+/// # Returns
+/// - `200 OK`: User data wrapped in success response
+/// - `404 Not Found`: User does not exist or was deleted
+/// - `500 Internal Server Error`: Database or cache failures
+/// 
+/// # Error Handling
+/// - Distinguishes between database errors and missing records
+/// - Provides consistent error messages via `ErrorMessage` enum
+/// - Graceful fallback from cache misses to database queries
 pub async fn get_user_by_id(
     State(state): State<Arc<AppState>>,
     Path(user_id): Path<Uuid>
