@@ -7,7 +7,11 @@ use lettre::{
     Transport,
 };
 
-use crate::errors::{ HttpError, ErrorMessage };
+use crate::{
+    dto::email_dtos::EmailRequest,
+    errors::{ HttpError, ErrorMessage },
+    services::email_services::EnhancedEmailService,
+};
 
 /// SEND EMAIL
 /// Sends an HTML email using SMTP with template-based content.
