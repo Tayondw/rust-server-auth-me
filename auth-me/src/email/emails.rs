@@ -1,5 +1,5 @@
 use super::send_email::send_email;
-use crate::errors::{ HttpError, ErrorMessage };
+use crate::{ errors::{ HttpError, ErrorMessage }, services::email_services::EnhancedEmailService };
 
 /// Sends a verification email to a user who has attempted to sign up
 ///
@@ -106,7 +106,7 @@ pub async fn send_admin_created_user_email(
 ///
 /// # Arguments
 /// * `to_email` - The email address of the recipient
-/// * `rest_link` - The link for resetting the password
+/// * `reset_link` - The link for resetting the password
 /// * `username` - The username of the recipient
 ///
 /// # Returns
@@ -117,7 +117,7 @@ pub async fn send_forgot_password_email(
     username: &str
 ) -> Result<(), HttpError> {
     let subject = "Reset your Password";
-    let template_path = "src/mail/templates/reset-password-email.html";
+    let template_path = "src/email/templates/reset-password-email.html";
     let placeholders = vec![
         ("{{username}}".to_string(), username.to_string()),
         ("{{reset_link}}".to_string(), reset_link.to_string())
