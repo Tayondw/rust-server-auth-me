@@ -18,7 +18,7 @@ use serde_json::json;
 use chrono::{ Utc, Duration };
 use time::Duration as TimeDuration;
 
-use tracing::{error, warn};
+use tracing::{ error, warn };
 use validator::Validate;
 
 use crate::{
@@ -74,7 +74,13 @@ pub async fn signup_handler(
 
     // Create pending user (this handles all validation and email sending)
     // The service will automatically force the role to User regardless of request
-    match UserService::create_pending_user_signup(signup_data, &state.config.database.pool).await {
+    match
+        UserService::create_pending_user_signup(
+            &state,
+            signup_data,
+            &state.config.database.pool
+        ).await
+    {
         Ok(_pending_user) => {
             Ok(
                 Json(
@@ -105,6 +111,7 @@ pub async fn verify_email_handler(
     let mut conn = state.conn()?;
 
     let pending_user_id = pending_user.id;
+    let pending_user_clone = pending_user.clone(); // Clone for use after transaction
 
     let user_result = conn.transaction::<User, DieselError, _>(|conn| {
         // Complete user registration from pending user
@@ -134,9 +141,16 @@ pub async fn verify_email_handler(
                 // Don't fail the request for this, just log it
             }
 
-            // Step 5: Send welcome email
-            if let Err(e) = send_welcome_email(&user.email, &user.name).await {
-                eprintln!("Failed to send welcome email: {}", e);
+            // Step 5: Send appropriate welcome email based on pending user preferences
+            if
+                let Err(e) = UserService::send_post_verification_welcome_email(
+                    &state.email_service,
+                    &user,
+                    &pending_user_clone
+                ).await
+            {
+                eprintln!("Failed to send post-verification welcome email: {}", e);
+                // Don't fail the verification process if email fails
             }
 
             // Step 6: Generate JWT token
@@ -169,14 +183,15 @@ pub async fn verify_email_handler(
                 headers,
                 Json(
                     json!({
-                    "message": "Email verified successfully and account created",
-                    "user_id": user.id,
-                    "creation_type": if user.created_by.is_some() { 
-                        "AdminCreated" 
-                    } else { 
-                        "SelfSignup" 
-                    }
-                })
+                      "message": "Email verified successfully and account created",
+                      "user_id": user.id,
+                      "creation_type": if user.created_by.is_some() { 
+                          "AdminCreated" 
+                      } else { 
+                          "SelfSignup" 
+                      },
+                      "welcome_email_sent": true // Indicates welcome email was processed
+                  })
                 ),
             );
 
@@ -205,7 +220,11 @@ pub async fn resend_verification_email_handler(
     }
 
     // Resend verification email
-    UserService::resend_verification_email(&state.config.database.pool, &request.email).await?;
+    UserService::resend_verification_email(
+        &state.config.database.pool,
+        &state,
+        &request.email
+    ).await?;
 
     Ok(
         Json(
@@ -485,7 +504,12 @@ pub async fn forgot_password(
 
     let reset_link = format!("http://localhost:5173/reset-password?token={}", &verification_token);
 
-    let email_sent = send_forgot_password_email(&user.email, &reset_link, &user.name).await;
+    let email_sent = send_forgot_password_email(
+        &state.email_service,
+        &user.email,
+        &reset_link,
+        &user.name
+    ).await;
 
     if let Err(e) = email_sent {
         eprintln!("Failed to send forgot password email: {}", e);
