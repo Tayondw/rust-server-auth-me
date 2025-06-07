@@ -8,6 +8,9 @@ CREATE TABLE pending_users (
     token_expires_at TIMESTAMP NOT NULL,
     role user_role NOT NULL DEFAULT 'user',
     created_by UUID REFERENCES users(id),
+    send_welcome_email BOOLEAN NOT NULL DEFAULT FALSE,
+    temp_password TEXT,
+    has_temp_password BOOLEAN NOT NULL DEFAULT FALSE,
     force_password_change BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
