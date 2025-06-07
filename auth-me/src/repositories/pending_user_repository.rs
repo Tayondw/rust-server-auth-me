@@ -1,6 +1,6 @@
 use diesel::prelude::*;
 use uuid::Uuid;
-use chrono::{Utc, NaiveDateTime};
+use chrono::{ Utc, NaiveDateTime };
 
 use crate::{
     config::{ ConfigError, database::PgPool },
@@ -153,5 +153,35 @@ impl PendingUserRepository {
         let username_exists = username_exists_users || username_exists_pending;
 
         Ok((email_exists, username_exists))
+    }
+
+    /// Helper method to create pending user for regular signup (non-admin)
+    /// This method sets default values for admin-specific fields
+    pub fn create_pending_user_for_signup(
+        pool: &PgPool,
+        name: String,
+        email: String,
+        username: String,
+        hashed_password: String,
+        verification_token: String,
+        token_expires_at: NaiveDateTime,
+        role: crate::models::UserRole
+    ) -> Result<PendingUser, ConfigError> {
+        let pending_user_data = NewPendingUser {
+            name,
+            email,
+            username,
+            password: hashed_password,
+            verification_token,
+            token_expires_at,
+            role,
+            created_by: None, // Self signup
+            send_welcome_email: true, // Regular users get welcome email
+            temp_password: None,
+            has_temp_password: false, // They provided their own password
+            force_password_change: false,
+        };
+
+        Self::create_pending_user(pool, pending_user_data)
     }
 }
