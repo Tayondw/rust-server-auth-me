@@ -13,6 +13,8 @@ mod repositories;
 mod services;
 
 use config::{ Config, logging::init_logging };
+use connection::seed::run_initial_setup;
+use errors::HttpError;
 use middleware::{
     csrf::{ csrf_middleware, TokenStore },
     cors::create_cors_layer,
@@ -20,8 +22,7 @@ use middleware::{
     security_headers::security_headers,
 };
 use routes::create_router;
-use connection::seed::run_initial_setup;
-use errors::HttpError;
+use services::email_services::EnhancedEmailService;
 
 use std::{ net::SocketAddr, sync::Arc };
 
@@ -35,6 +36,7 @@ use tracing::info;
 #[derive(Clone)]
 pub struct AppState {
     pub config: Config,
+    pub email_service: Arc<EnhancedEmailService>,
 }
 
 #[tokio::main]
@@ -55,7 +57,24 @@ async fn main() -> Result<(), HttpError> {
         HttpError::server_error(format!("Failed to load configuration: {}", e))
     })?;
 
-    let shared_state: Arc<AppState> = Arc::new(AppState { config: config.clone() });
+    // Initialize the email service
+    let email_service = Arc::new(
+        EnhancedEmailService::from_env_with_redis().await.map_err(|e|
+            HttpError::server_error(format!("Failed to initialize email service: {}", e))
+        )?
+    );
+
+    // Warm up the email connection pool
+    email_service
+        .warmup_pool(5).await
+        .map_err(|e|
+            HttpError::server_error(format!("Failed to warm up email connection pool: {}", e))
+        )?;
+
+    let shared_state: Arc<AppState> = Arc::new(AppState {
+        config: config.clone(),
+        email_service: email_service.clone(),
+    });
 
     // Initialize tracing subscriber
     tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).try_init().ok();
