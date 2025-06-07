@@ -18,6 +18,9 @@ pub struct PendingUser {
     pub token_expires_at: NaiveDateTime,
     pub role: UserRole,
     pub created_by: Option<Uuid>,
+    pub send_welcome_email: bool,
+    pub temp_password: Option<String>, // Store unhashed for welcome email
+    pub has_temp_password: bool,
     pub force_password_change: bool,
     pub created_at: Option<NaiveDateTime>,
 }
@@ -33,5 +36,8 @@ pub struct NewPendingUser {
     pub token_expires_at: NaiveDateTime,
     pub role: UserRole,
     pub created_by: Option<Uuid>,
+    pub send_welcome_email: bool,
+    pub temp_password: Option<String>,
+    pub has_temp_password: bool,
     pub force_password_change: bool,
 }
