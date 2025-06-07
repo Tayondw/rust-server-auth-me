@@ -491,7 +491,7 @@
 //     Ok(())
 // }
 
-use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation, Algorithm };
+// use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation, Algorithm };
 // use serde::{ Deserialize, Serialize };
 // use time::{ OffsetDateTime, Duration };
 // use uuid::Uuid;
@@ -1336,7 +1336,7 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 //     }
 // }
 
-// ----------------------------------------------------- AUTHENTICATION HANDLERS -------------------------------------------------------------
+// ----------------------------------------------------- AUTHENTICATION HANDLERS ----------------------------------------------------------
 // FROM SIGNUP HANDLER
 // Wrap in a transaction
 
@@ -1635,3 +1635,225 @@ use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation
 //     Token(&'a str),
 //     Role(&'a str),
 // }
+
+// ---------------------------------------------- PENDING USER REPOSITORY -----------------------------------------------------
+ // IMPORTANT: Check if the user should be verified immediately or go through pending process
+        //   if admin_request.verified {
+        //       // Create user directly in users table (verified)
+        //       let params = CreateUserParams {
+        //           name: admin_request.name.clone(),
+        //           email: admin_request.email.clone(),
+        //           username: admin_request.username.clone(),
+        //           password: hashed_password,
+        //           verified: true,
+        //           token_expires_at: None, // No verification needed
+        //           role: admin_request.role,
+        //           created_by: Some(admin_user_id),
+        //           force_password_change: admin_request.force_password_change || is_temp_password,
+        //       };
+
+        //       let user = UserRepository::create_user_unified(conn, params).map_err(|e| {
+        //           error!(
+        //               "Failed to create verified user in database for {}: {}",
+        //               admin_request.email,
+        //               e
+        //           );
+        //           HttpError::server_error(format!("Failed to create user: {}", e))
+        //       })?;
+
+        //       info!("Successfully created verified user {} with ID {}", admin_request.email, user.id);
+
+        //       // Send welcome email for verified users
+        //       if admin_request.send_welcome_email {
+        //           let email_result = send_admin_created_user_email(
+        //               &state.email_service,
+        //               &user.email,
+        //               &user.name,
+        //               if is_temp_password {
+        //                   Some(&password)
+        //               } else {
+        //                   None
+        //               }
+        //           ).await;
+
+        //           match email_result {
+        //               Ok(_) => info!("Welcome email sent successfully to: {}", user.email),
+        //               Err(e) => error!("Failed to send welcome email to {}: {:?}", user.email, e),
+        //           }
+        //       }
+
+        //       Ok(AdminCreateUserResponse {
+        //           message: "User created successfully and is ready to login".to_string(),
+        //           user_id: user.id,
+        //           temporary_password: if is_temp_password {
+        //               Some(password)
+        //           } else {
+        //               None
+        //           },
+        //           verification_required: false,
+        //       })
+        //   } else {
+        //       // Create pending user for email verification
+        //       info!("Creating pending user for email verification: {}", admin_request.email);
+
+        //       let verification_token = AuthService::generate_verification_token();
+        //       let token_expiration = (Utc::now() + Duration::hours(24)).naive_utc(); // 24 hours for admin-created
+
+        //       let pending_user_params = NewPendingUser {
+        //           name: admin_request.name.clone(),
+        //           email: admin_request.email.clone(),
+        //           username: admin_request.username.clone(),
+        //           password: hashed_password,
+        //           verification_token: verification_token.clone(),
+        //           token_expires_at: token_expiration,
+        //           role: admin_request.role,
+        //           created_by: Some(admin_user_id),
+        //           force_password_change: admin_request.force_password_change || is_temp_password,
+        //       };
+
+        //       let pending_user = PendingUserRepository::create_pending_user(
+        //           &state.config.database.pool,
+        //           pending_user_params
+        //       ).map_err(|e| {
+        //           error!("Failed to create pending user for {}: {}", admin_request.email, e);
+        //           HttpError::server_error(format!("Failed to create pending user: {}", e))
+        //       })?;
+
+        //       info!(
+        //           "Successfully created pending user {} with ID {}",
+        //           admin_request.email,
+        //           pending_user.id
+        //       );
+
+        //       // Send verification email
+        //       if admin_request.send_welcome_email {
+        //           let email_result = send_verification_email(
+        //               &state.email_service,
+        //               &pending_user.email,
+        //               &pending_user.username,
+        //               &verification_token
+        //           ).await;
+
+        //           match email_result {
+        //               Ok(_) =>
+        //                   info!("Verification email sent successfully to: {}", pending_user.email),
+        //               Err(e) =>
+        //                   error!(
+        //                       "Failed to send verification email to {}: {:?}",
+        //                       pending_user.email,
+        //                       e
+        //                   ),
+        //           }
+        //       }
+
+        //       Ok(AdminCreateUserResponse {
+        //           message: "User created successfully. Email verification required".to_string(),
+        //           user_id: pending_user.id,
+        //           temporary_password: if is_temp_password {
+        //               Some(password)
+        //           } else {
+        //               None
+        //           },
+        //           verification_required: true,
+        //       })
+        //   }
+
+        //   // Set token expiration if not verified
+        //   let token_expiration = if admin_request.verified {
+        //       None
+        //   } else {
+        //       Some(Utc::now() + Duration::hours(24)) // 24 hours for admin-created
+        //   };
+
+        //   // Create user parameters for admin creation
+        //   let params = CreateUserParams {
+        //       name: admin_request.name.clone(),
+        //       email: admin_request.email.clone(),
+        //       username: admin_request.username.clone(),
+        //       password: hashed_password,
+        //       verified: admin_request.verified,
+        //       token_expires_at: token_expiration,
+        //       role: admin_request.role,
+        //       created_by: Some(admin_user_id),
+        //       force_password_change: admin_request.force_password_change || is_temp_password,
+        //   };
+
+        //   // Create the user
+        //   let user = UserRepository::create_user_unified(conn, params).map_err(|e| {
+        //       error!("Failed to create user in database for {}: {}", admin_request.email, e);
+        //       HttpError::server_error(format!("Failed to create user: {}", e))
+        //   })?;
+
+        //   info!("Successfully created user {} with ID {}", admin_request.email, user.id);
+
+        //   // Handle email sending with better error handling
+        //   if admin_request.send_welcome_email {
+        //       let email_result = if admin_request.verified {
+        //           // User is pre-verified, send welcome with credentials
+        //           info!("Sending welcome email to verified user: {}", user.email);
+        //           send_admin_created_user_email(&state.email_service, &user.email, &user.name, if
+        //               is_temp_password
+        //           {
+        //               Some(&password)
+        //           } else {
+        //               None
+        //           }).await
+        //       } else {
+        //           // User needs to verify email, send verification email
+        //           if let Some(token) = &user.verification_token {
+        //               info!("Sending verification email to user: {}", user.email);
+        //               send_verification_email(
+        //                   &state.email_service,
+        //                   &user.email,
+        //                   &user.username,
+        //                   token
+        //               ).await
+        //           } else {
+        //               error!("No verification token generated for unverified user: {}", user.email);
+        //               Err(
+        //                   HttpError::not_found(
+        //                       ErrorMessage::VerificationTokenUnavailableError.to_string()
+        //                   )
+        //               )
+        //           }
+        //       };
+
+        //       // Log email result but don't fail user creation if email fails
+        //       match email_result {
+        //           Ok(_) => {
+        //               info!("Email sent successfully to: {}", user.email);
+        //           }
+        //           Err(e) => {
+        //               error!("Failed to send email to {}: {:?}", user.email, e);
+        //               // Consider whether to fail the entire operation or just log the error
+        //               // For now, we'll continue but include a warning in the response
+        //           }
+        //       }
+        //   } else {
+        //       info!("Email sending skipped for user: {}", user.email);
+        //   }
+
+        //   let response_message = if admin_request.verified {
+        //       if admin_request.send_welcome_email {
+        //           "User created successfully and welcome email sent. User is ready to login"
+        //       } else {
+        //           "User created successfully and is ready to login"
+        //       }
+        //   } else {
+        //       if admin_request.send_welcome_email {
+        //           "User created successfully and verification email sent. Email verification required"
+        //       } else {
+        //           "User created successfully. Email verification required"
+        //       }
+        //   };
+
+        //   Ok(AdminCreateUserResponse {
+        //       message: response_message.to_string(),
+        //       user_id: user.id,
+        //       temporary_password: if is_temp_password {
+        //           Some(password)
+        //       } else {
+        //           None
+        //       },
+        //       verification_required: !admin_request.verified,
+        //   })
