@@ -52,22 +52,22 @@ const USER_LIST_CACHE_TTL: u64 = 60; // 1 minute
 const SEARCH_CACHE_TTL: u64 = 30; // 30 seconds
 
 /// GET ALL USERS
-/// # Path Parameters  
+/// # Path Parameters
 /// - `user_id`: UUID of the target user
-/// 
+///
 /// # Cache Strategy
 /// - Cache key pattern: `user:{uuid}`
 /// - TTL: `USER_CACHE_TTL`
 /// - Multi-dimensional tags:
 ///   - `user:{id}` - Individual user invalidation
-///   - `role:{role}` - Role-based bulk invalidation  
+///   - `role:{role}` - Role-based bulk invalidation
 ///   - `verified:{status}` - Verification status invalidation
-/// 
+///
 /// # Returns
 /// - `200 OK`: User data wrapped in success response
 /// - `404 Not Found`: User does not exist or was deleted
 /// - `500 Internal Server Error`: Database or cache failures
-/// 
+///
 /// # Error Handling
 /// - Distinguishes between database errors and missing records
 /// - Provides consistent error messages via `ErrorMessage` enum
@@ -124,27 +124,27 @@ pub async fn get_users(
 
 /// GET USER BY ID
 /// Fetches a specific user by their id with caching
-/// 
+///
 /// This endpoint implements caching with multiple tag dimensions
 /// (user ID, role, verification status) enabling precise cache invalidation
 /// when user attributes change. Returns filtered user data for security.
-/// 
-/// # Path Parameters  
+///
+/// # Path Parameters
 /// - `user_id`: UUID of the target user
-/// 
+///
 /// # Cache Strategy
 /// - Cache key pattern: `user:{uuid}`
 /// - TTL: `USER_CACHE_TTL`
 /// - Multi-dimensional tags:
 ///   - `user:{id}` - Individual user invalidation
-///   - `role:{role}` - Role-based bulk invalidation  
+///   - `role:{role}` - Role-based bulk invalidation
 ///   - `verified:{status}` - Verification status invalidation
-/// 
+///
 /// # Returns
 /// - `200 OK`: User data wrapped in success response
 /// - `404 Not Found`: User does not exist or was deleted
 /// - `500 Internal Server Error`: Database or cache failures
-/// 
+///
 /// # Error Handling
 /// - Distinguishes between database errors and missing records
 /// - Provides consistent error messages via `ErrorMessage` enum
@@ -625,18 +625,26 @@ pub async fn admin_create_user_handler(
 ) -> Result<impl IntoResponse, HttpError> {
     // Validate input
     if let Err(validation_errors) = admin_request.validate() {
+        error!("Validation failed for admin user creation: {}", validation_errors);
         return Err(HttpError::validation_error(validation_errors.to_string()));
     }
 
     // Check permissions
     if !UserService::can_create_users(&auth_user.role) {
+        error!("User {} lacks permission to create users", auth_user.id);
         return Err(HttpError::unauthorized(ErrorMessage::PermissionDenied.to_string()));
     }
 
     // Validate role creation permissions
-    UserService::validate_admin_creation_permissions(&auth_user.role, &admin_request.role).map_err(
-        |e| HttpError::unauthorized(e.to_string())
-    )?;
+    if
+        let Err(e) = UserService::validate_admin_creation_permissions(
+            &auth_user.role,
+            &admin_request.role
+        )
+    {
+        error!("Role creation permission denied for user {}: {}", auth_user.id, e);
+        return Err(HttpError::unauthorized(e.to_string()));
+    }
 
     let mut conn = state.conn()?;
 
