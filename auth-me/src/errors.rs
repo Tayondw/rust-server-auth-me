@@ -43,6 +43,7 @@ pub enum ErrorMessage {
     PasswordComparison,
     VerificationTokenExpiredError,
     VerificationTokenInvalidError,
+    VerificationTokenUnavailableError,
 }
 
 impl ToString for ErrorMessage {
@@ -91,6 +92,8 @@ impl ErrorMessage {
                 "Verification token has expired".to_string(),
             ErrorMessage::VerificationTokenInvalidError =>
                 "Verification token is invalid".to_string(),
+            ErrorMessage::VerificationTokenUnavailableError =>
+                "No verification token available".to_string(),
             ErrorMessage::WrongCredentials =>
                 "Email, username, or password is incorrect".to_string(),
         }
