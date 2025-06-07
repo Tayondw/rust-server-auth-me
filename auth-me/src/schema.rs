@@ -20,6 +20,9 @@ diesel::table! {
         token_expires_at -> Timestamp,
         role -> UserRole,
         created_by -> Nullable<Uuid>,
+        send_welcome_email -> Bool,
+        temp_password -> Nullable<Text>,
+        has_temp_password -> Bool,
         force_password_change -> Bool,
         created_at -> Nullable<Timestamp>,
     }
