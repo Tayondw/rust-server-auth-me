@@ -41,6 +41,20 @@ DatabaseConfig will be split into two parts:
       - another struct that includes the actual pool
 */
 
+/// Raw configuration structure for deserialization
+///
+/// This struct contains all configuration values in their primitive form,
+/// suitable for deserialization from environment variables, configuration files,
+/// or other external sources. It excludes complex types like connection pools
+/// that cannot be directly deserialized.
+///
+/// # Field Categories:
+/// - **Database**: Connection string and schema information
+/// - **Authentication**: JWT secrets and token expiration times
+/// - **Infrastructure**: Redis URL, server port, rate limiting
+/// - **Email**: SMTP server configuration for notifications
+/// - **Cloud Storage**: AWS S3 credentials and bucket information
+/// - **Observability**: Logging configuration
 #[derive(Debug, Deserialize, Clone)]
 pub struct RawDatabaseConfig {
     pub database_url: String,
@@ -64,8 +78,32 @@ pub struct RawDatabaseConfig {
     pub aws_region: String,
 }
 
-/// Basic validation to check for empty strings or invalid numbers
+/// Validation implementation for raw configuration
+///
+/// Performs basic checks on configuration values before they're used
+/// to create expensive resources like database connection pools.
+///
+/// # Validation Rules:
+/// - String fields must not be empty or whitespace-only
+/// - Numeric fields must be positive where appropriate
+/// - Critical security fields (JWT secrets) are checked for presence
+///
+/// # Design Philosophy:
+/// This validation is intentionally basic and focuses on preventing
+/// obvious misconfigurations. More sophisticated validation (URL parsing,
+/// network connectivity, etc.) happens later in the initialization process.
 impl RawDatabaseConfig {
+    /// Validates the raw configuration for basic consistency
+    ///
+    /// # Returns
+    /// - `Ok(())` if all validation checks pass
+    /// - `Err(ConfigError::Config)` with descriptive message if validation fails
+    ///
+    /// # Validation Checks:
+    /// - Essential connection strings are not empty
+    /// - JWT secrets are present (security critical)
+    /// - Token expiration times are positive
+    /// - Logging configuration is present
     pub fn validate(&self) -> Result<(), ConfigError> {
         if self.database_url.trim().is_empty() {
             return Err(ConfigError::Config("DATABASE_URL cannot be empty".into()));
