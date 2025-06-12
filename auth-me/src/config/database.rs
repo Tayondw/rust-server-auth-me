@@ -53,13 +53,11 @@ pub struct RawDatabaseConfig {
     pub redis_url: String,
     pub port: u16,
     pub rate_limit_requests_per_minute: u32,
-    // SMTP fields
     pub smtp_server: String,
     pub smtp_port: u16,
     pub smtp_username: String,
     pub smtp_password: String,
     pub smtp_from_address: String,
-    // AWS fields
     pub aws_s3_bucket_name: String,
     pub aws_s3_key: String,
     pub aws_s3_secret: String,
@@ -110,13 +108,11 @@ pub struct DatabaseConfig {
     pub redis_url: String,
     pub port: u16,
     pub rate_limit_requests_per_minute: u32,
-    // SMTP config
     pub smtp_server: String,
     pub smtp_port: u16,
     pub smtp_username: String,
     pub smtp_password: String,
     pub smtp_from_address: String,
-    // AWS config
     pub aws_s3_bucket_name: String,
     pub aws_s3_key: String,
     pub aws_s3_secret: String,
@@ -199,13 +195,11 @@ impl DatabaseConfig {
                 ::var("RATE_LIMIT_RPM")
                 .map(|v| v.parse().unwrap_or(60))
                 .unwrap_or(60),
-            // SMTP config
             smtp_server: get_env("SMTP_SERVER")?,
             smtp_port: get_env_parse_u16("SMTP_PORT")?,
             smtp_username: get_env("SMTP_USERNAME")?,
             smtp_password: get_env("SMTP_PASSWORD")?,
             smtp_from_address: get_env("SMTP_FROM_ADDRESS")?,
-            // AWS config
             aws_s3_bucket_name: get_env("AWS_S3_BUCKET_NAME")?,
             aws_s3_key: get_env("AWS_S3_KEY")?,
             aws_s3_secret: get_env("AWS_S3_SECRET")?,
