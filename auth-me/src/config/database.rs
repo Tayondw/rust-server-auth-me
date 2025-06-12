@@ -36,9 +36,27 @@ pub enum ConfigError {
 /*
 serde::Deserialize cannot be derived for types like Pool<ConnectionManager<PgConnection>>, since they do not implement Deserialize and cannot be deserialized directly from configuration files or JSON.
 
-DatabaseConfig will be split into two parts:
-      - one struct for deserializing raw config values from the environment
-      - another struct that includes the actual pool
+=== DESIGN PATTERN: Two-Phase Configuration ===
+
+The configuration is split into two complementary structures:
+
+1. RawDatabaseConfig: Handles deserialization from environment variables
+   - Implements Deserialize for automatic parsing from config files/env
+   - Contains only serializable primitive types (String, i64, u16, etc.)
+   - Performs basic validation of required fields
+   - Acts as an intermediate representation
+
+2. DatabaseConfig: The final runtime configuration
+   - Contains complex types like connection pools that cannot be deserialized
+   - Built from RawDatabaseConfig after validation and pool creation
+   - Used throughout the application for actual operations
+   - Provides testing utilities and factory methods
+
+This separation allows for:
+- Clean deserialization from multiple sources (env vars, config files, etc.)
+- Proper validation before expensive resource allocation
+- Testability through dependency injection
+- Clear separation of concerns between config loading and runtime usage
 */
 
 /// Raw configuration structure for deserialization
