@@ -378,7 +378,42 @@ impl DatabaseConfig {
         DatabaseConfig::from_raw(raw)
     }
 
-    /// FOR TESTING PURPOSES
+    /// Creates a test configuration with a pre-configured database pool
+    /// 
+    /// This method is designed for unit and integration testing,
+    /// allowing tests to inject their own database pool while providing
+    /// sensible defaults for all other configuration values.
+    /// 
+    /// # Arguments
+    /// * `pool` - Pre-configured database connection pool (typically a test database)
+    /// 
+    /// # Returns
+    /// * `DatabaseConfig` - Configuration suitable for testing
+    /// 
+    /// # Testing Strategy:
+    /// - Uses "test" values for most strings to avoid accidental production usage
+    /// - Provides realistic but safe defaults for all services
+    /// - Allows individual tests to override specific values if needed
+    /// 
+    /// # Example Usage:
+    /// ```rust
+    /// #[cfg(test)]
+    /// mod tests {
+    ///     use super::*;
+    ///     
+    ///     #[test]
+    ///     fn test_user_creation() {
+    ///         let pool = create_test_pool(); // Test-specific pool setup
+    ///         let config = DatabaseConfig::with_pool(pool);
+    ///         
+    ///         // Use config in tests...
+    ///     }
+    /// }
+    /// ```
+    /// 
+    /// # Security Note:
+    /// Test configurations use hardcoded "test" values for secrets.
+    /// These should never be used in production environments.
     pub fn with_pool(pool: PgPool) -> Self {
         Self {
             database_url: "test".into(),
