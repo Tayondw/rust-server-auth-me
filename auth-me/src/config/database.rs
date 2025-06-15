@@ -208,8 +208,25 @@ pub struct DatabaseConfig {
 }
 
 impl DatabaseConfig {
-    /// Build from a RawDatabaseConfig (which contains loaded fields).
+    /// Creates a DatabaseConfig from a validated RawDatabaseConfig
+    ///
+    /// This is the primary constructor that takes a raw configuration,
+    /// validates it, and initializes expensive resources like the database pool.
+    ///
+    /// # Arguments
+    /// * `raw` - Pre-loaded raw configuration (typically from environment variables)
+    ///
+    /// # Returns
+    /// * `Ok(DatabaseConfig)` - Fully initialized configuration
+    /// * `Err(ConfigError)` - Validation failure or pool creation error
+    ///
+    /// # Database Pool Configuration
+    /// The pool is configured with production-ready defaults:
+    /// - **15 connections**: Suitable for moderate load applications
+    /// - **5 second timeout**: Prevents request hanging in high-load scenarios
+    /// - **Automatic retry**: R2D2 handles transient connection failures
     pub fn from_raw(raw: RawDatabaseConfig) -> Result<Self, ConfigError> {
+      
         raw.validate()?;
         let manager = ConnectionManager::<PgConnection>::new(&raw.database_url);
         let pool = Pool::builder()
