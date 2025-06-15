@@ -245,6 +245,8 @@ impl DatabaseConfig {
 
         Ok(Self {
             pool,
+            // Copy all fields from the raw configuration
+            // This duplication allows the DatabaseConfig to be self-contained
             database_url: raw.database_url,
             jwt_secret: raw.jwt_secret,
             jwt_refresh_secret: raw.jwt_refresh_secret,
