@@ -225,6 +225,12 @@ impl DatabaseConfig {
     /// - **15 connections**: Suitable for moderate load applications
     /// - **5 second timeout**: Prevents request hanging in high-load scenarios
     /// - **Automatic retry**: R2D2 handles transient connection failures
+    ///     /// 
+    /// # Example
+    /// ```rust
+    /// let raw_config = RawDatabaseConfig { /* loaded from env */ };
+    /// let config = DatabaseConfig::from_raw(raw_config)?;
+    /// ```
     pub fn from_raw(raw: RawDatabaseConfig) -> Result<Self, ConfigError> {
         // Validate the raw configuration before creating expensive resources
         raw.validate()?;
@@ -269,7 +275,39 @@ impl DatabaseConfig {
         })
     }
 
-    /// Load from environment variables and build the config.
+    /// Loads configuration from environment variables and initializes resources
+    ///
+    /// This is the main entry point for production configuration loading.
+    /// It reads all required environment variables, validates them, and
+    /// creates a fully initialized DatabaseConfig.
+    ///
+    /// # Required Environment Variables:
+    /// - `DATABASE_URL`: PostgreSQL connection string
+    /// - `JWT_SECRET`: Secret for access token signing
+    /// - `JWT_REFRESH_SECRET`: Secret for refresh token signing
+    /// - `RUST_LOG`: Logging configuration
+    /// - `SCHEMA`: Database schema name
+    /// - `JWT_EXPIRES_IN`: Access token expiration (seconds)
+    /// - `JWT_REFRESH_EXPIRES_IN`: Refresh token expiration (seconds)
+    /// - `SMTP_*`: Email server configuration
+    /// - `AWS_*`: S3 storage configuration
+    ///
+    /// # Optional Environment Variables (with defaults):
+    /// - `REDIS_URL`: Redis connection string (default: "redis://127.0.0.1:6379")
+    /// - `PORT`: Server port (default: 3000)
+    /// - `RATE_LIMIT_RPM`: Rate limit per minute (default: 60)
+    ///
+    /// # Error Handling:
+    /// - Missing required variables return descriptive ConfigError::Config
+    /// - Invalid numeric values return parsing errors with context
+    /// - Database connection failures return ConfigError::Pool
+    ///
+    /// # Example
+    /// ```rust
+    /// // Typically called once at application startup
+    /// let config = DatabaseConfig::new()
+    ///     .expect("Failed to load configuration");
+    /// ```
     pub fn new() -> Result<Self, ConfigError> {
         // Helper function to get env var with better error messages
         let get_env = |key: &str| -> Result<String, ConfigError> {
