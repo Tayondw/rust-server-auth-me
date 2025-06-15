@@ -225,7 +225,7 @@ impl DatabaseConfig {
     /// - **15 connections**: Suitable for moderate load applications
     /// - **5 second timeout**: Prevents request hanging in high-load scenarios
     /// - **Automatic retry**: R2D2 handles transient connection failures
-    ///     /// 
+    ///     ///
     /// # Example
     /// ```rust
     /// let raw_config = RawDatabaseConfig { /* loaded from env */ };
@@ -309,13 +309,16 @@ impl DatabaseConfig {
     ///     .expect("Failed to load configuration");
     /// ```
     pub fn new() -> Result<Self, ConfigError> {
-        // Helper function to get env var with better error messages
+        // Helper function for required environment variables
+        // Provides consistent error messages for missing variables
         let get_env = |key: &str| -> Result<String, ConfigError> {
             env::var(key).map_err(|_| {
                 ConfigError::Config(format!("Missing required environment variable: {}", key))
             })
         };
 
+        // Helper function for parsing integer environment variables
+        // Provides context-aware error messages for parsing failures
         let get_env_parse = |key: &str| -> Result<i64, ConfigError> {
             let val = get_env(key)?;
             val.parse().map_err(|e| {
@@ -323,6 +326,8 @@ impl DatabaseConfig {
             })
         };
 
+        // Helper function for parsing u16 environment variables
+        // Specialized for port numbers and similar small integers
         let get_env_parse_u16 = |key: &str| -> Result<u16, ConfigError> {
             let val = get_env(key)?;
             val.parse().map_err(|e| {
@@ -330,7 +335,9 @@ impl DatabaseConfig {
             })
         };
 
+        // Build the raw configuration from environment variables
         let raw = RawDatabaseConfig {
+            // Required database configuration
             database_url: get_env("DATABASE_URL")?,
             jwt_secret: get_env("JWT_SECRET")?,
             jwt_refresh_secret: get_env("JWT_REFRESH_SECRET")?,
@@ -338,28 +345,36 @@ impl DatabaseConfig {
             schema: get_env("SCHEMA")?,
             jwt_expires_in: get_env_parse("JWT_EXPIRES_IN")?,
             jwt_refresh_expires_in: get_env_parse("JWT_REFRESH_EXPIRES_IN")?,
+
+            // Optional configuration with sensible defaults
             redis_url: env
                 ::var("REDIS_URL")
                 .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string()),
             port: env
                 ::var("PORT")
-                .map(|v| v.parse().unwrap_or(3000))
-                .unwrap_or(3000),
+                .map(|v| v.parse().unwrap_or(3000)) // Default to 3000 if parsing fails
+                .unwrap_or(3000), // Default to 3000 if variable not set
             rate_limit_requests_per_minute: env
                 ::var("RATE_LIMIT_RPM")
-                .map(|v| v.parse().unwrap_or(60))
-                .unwrap_or(60),
+                .map(|v| v.parse().unwrap_or(60)) // Default to 60 RPM if parsing fails
+                .unwrap_or(60), // Default to 60 RPM if variable not set
+
+            // Required SMTP configuration for email functionality
             smtp_server: get_env("SMTP_SERVER")?,
             smtp_port: get_env_parse_u16("SMTP_PORT")?,
             smtp_username: get_env("SMTP_USERNAME")?,
             smtp_password: get_env("SMTP_PASSWORD")?,
             smtp_from_address: get_env("SMTP_FROM_ADDRESS")?,
+
+            // Required AWS S3 configuration for file storage
             aws_s3_bucket_name: get_env("AWS_S3_BUCKET_NAME")?,
             aws_s3_key: get_env("AWS_S3_KEY")?,
             aws_s3_secret: get_env("AWS_S3_SECRET")?,
             aws_region: get_env("AWS_REGION")?,
         };
 
+        // Convert the raw configuration to a final DatabaseConfig
+        // This validates the configuration and initializes the database pool
         DatabaseConfig::from_raw(raw)
     }
 
