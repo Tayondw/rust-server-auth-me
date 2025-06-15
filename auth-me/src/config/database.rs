@@ -226,12 +226,21 @@ impl DatabaseConfig {
     /// - **5 second timeout**: Prevents request hanging in high-load scenarios
     /// - **Automatic retry**: R2D2 handles transient connection failures
     pub fn from_raw(raw: RawDatabaseConfig) -> Result<Self, ConfigError> {
-      
+        // Validate the raw configuration before creating expensive resources
         raw.validate()?;
         let manager = ConnectionManager::<PgConnection>::new(&raw.database_url);
+        // Create the database connection manager
+        // This handles the actual PostgreSQL connection logic
         let pool = Pool::builder()
+            // Maximum number of connections in the pool
+            // Balances performance (more connections = more parallelism) vs resource usage (each connection consumes memory)
             .max_size(15)
+            // Maximum time to wait for a connection
+            // Prevents requests from hanging indefinitely
+            // when the pool is exhausted
             .connection_timeout(Duration::from_secs(5))
+            // Create the pool, returning error if unsuccessful
+            // Common failures: invalid connection string, network issues, authentication problems, database unavailable
             .build(manager)?;
 
         Ok(Self {
