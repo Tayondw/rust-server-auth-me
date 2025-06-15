@@ -416,6 +416,7 @@ impl DatabaseConfig {
     /// These should never be used in production environments.
     pub fn with_pool(pool: PgPool) -> Self {
         Self {
+            // Basic application configuration with test-safe values
             database_url: "test".into(),
             jwt_secret: "test_secret".into(),
             jwt_refresh_secret: "test_refresh_secret".into(),
@@ -424,14 +425,20 @@ impl DatabaseConfig {
             jwt_expires_in: 3600,
             jwt_refresh_expires_in: 900,
             pool,
+
+            // Infrastructure defaults suitable for testing
             redis_url: "redis://127.0.0.1:6379".into(),
             port: 8080,
             rate_limit_requests_per_minute: 60,
+
+            // SMTP configuration for email testing
             smtp_server: "localhost".into(),
             smtp_port: 587,
             smtp_username: "test".into(),
             smtp_password: "test".into(),
             smtp_from_address: "test@test.com".into(),
+
+            // AWS S3 configuration for file storage testing
             aws_s3_bucket_name: "test-bucket".into(),
             aws_s3_key: "test-key".into(),
             aws_s3_secret: "test-secret".into(),
