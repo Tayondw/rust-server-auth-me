@@ -151,8 +151,29 @@ impl RawDatabaseConfig {
     }
 }
 
+/// Production-ready configuration with initialized resources
+///
+/// This structure contains the final configuration used throughout the application,
+/// including complex types like database connection pools that cannot be deserialized
+/// directly from configuration files.
+///
+/// # Key Features:
+/// - **Database Pool**: Pre-configured connection pool for efficient database access
+/// - **Validation**: All values have been validated before pool creation
+/// - **Testing Support**: Factory methods for unit/integration testing
+/// - **Resource Management**: Handles expensive resource initialization
+///
+/// # Usage Pattern:
+/// ```rust
+/// // Production: Load from environment
+/// let config = DatabaseConfig::new()?;
+///
+/// // Testing: Inject test dependencies
+/// let config = DatabaseConfig::with_pool(test_pool);
+/// ```
 #[derive(Debug, Clone)]
 pub struct DatabaseConfig {
+    // Core application configuration (duplicated from RawDatabaseConfig)
     pub database_url: String,
     pub jwt_secret: String,
     pub jwt_refresh_secret: String,
@@ -160,7 +181,6 @@ pub struct DatabaseConfig {
     pub schema: String,
     pub jwt_expires_in: i64,
     pub jwt_refresh_expires_in: i64,
-    pub pool: PgPool,
     pub redis_url: String,
     pub port: u16,
     pub rate_limit_requests_per_minute: u32,
@@ -173,6 +193,18 @@ pub struct DatabaseConfig {
     pub aws_s3_key: String,
     pub aws_s3_secret: String,
     pub aws_region: String,
+
+    /// Database connection pool
+    ///
+    /// Pre-configured pool of PostgreSQL connections managed by R2D2.
+    /// Provides efficient connection reuse and automatic connection management.
+    ///
+    /// # Pool Configuration:
+    /// - **Max Size**: 15 connections (balances performance vs resource usage)
+    /// - **Connection Timeout**: 5 seconds (prevents hanging requests)
+    /// - **Automatic Reconnection**: Handles transient network issues
+    /// - **Connection Validation**: Ensures connections are healthy before use
+    pub pool: PgPool,
 }
 
 impl DatabaseConfig {
