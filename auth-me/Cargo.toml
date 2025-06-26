@@ -78,6 +78,7 @@ handlebars = "5.1"
 
 anyhow = "1.0"
 url = "2.5.4"
+rust_decimal = "1.37.2"
 
 [dev-dependencies]
 cargo-watch = "8.5.3"
