@@ -17,10 +17,6 @@ pub fn create_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .merge(setup_complete_router(state.clone()))
         // General routes (health check, etc.)
         .merge(general_routes())
-
         // CSRF token route
         .route("/csrf-token", get(get_csrf_token))
-
-    // Add any other top-level routes here
-    // .merge(other_routes())
 }
