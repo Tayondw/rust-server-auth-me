@@ -3,6 +3,7 @@ pub mod database;
 pub mod cache;
 pub mod logging;
 pub mod email;
+pub mod validation;
 
 // use aws::AwsConfig;
 pub use database::{ DatabaseConfig, ConfigError };
