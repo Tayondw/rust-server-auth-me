@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(app) => app,
         Err(e) => {
             eprintln!("Failed to initialize application: {}", e);
-            std::process::exit(1); // This is fine in a match arm
+            std::process::exit(1);
         }
     };
 
