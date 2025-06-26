@@ -42,8 +42,10 @@ A robust, production-ready authentication and user management system built with 
 ```
 auth-me/
 ├── src/
-│   ├── config/           # Configuration management
-│   ├── connection/       # Database & email connections
+│   ├── lib.rs           # Library entry point (public API)
+│   ├── main.rs          # Binary entry point (server)
+│   ├── config/          # Configuration management
+│   ├── connection/      # Database & email connections
 │   ├── dto/             # Data Transfer Objects
 │   ├── email/           # Email services & templates
 │   ├── errors.rs        # Error handling
@@ -234,6 +236,12 @@ make test-specific
 
 # Run with coverage
 cargo test --coverage
+
+# Test as library
+cargo test --lib
+
+# Test binary integration
+cargo test --bin auth-me
 ```
 
 ## 🚀 Deployment
