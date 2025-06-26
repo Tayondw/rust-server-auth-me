@@ -3,6 +3,16 @@ name = "auth-me"
 version = "0.1.0"
 edition = "2021"
 
+# Library configuration
+[lib]
+name = "auth_me"
+path = "src/lib.rs"
+
+# Binary configuration
+[[bin]]
+name = "auth-me"
+path = "src/main.rs"
+
 [dependencies]
 # Web Framework
 axum = "0.8.3"
