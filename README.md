@@ -297,7 +297,3 @@ This authentication system can be integrated with various frontend frameworks:
 - Create an issue for bug reports
 - Use discussions for questions
 - Check the wiki for detailed documentation
-
----
-
-**Built with ❤️ using Rust and modern web technologies**
