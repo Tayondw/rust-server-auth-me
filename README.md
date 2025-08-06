@@ -2,7 +2,7 @@
 
 A robust, production-ready authentication and user management system built with Rust, Axum, and PostgreSQL.
 
-## 🚀 Features
+## Features
 
 ### Core Authentication
 - **JWT-based Authentication** with access and refresh tokens
@@ -37,7 +37,7 @@ A robust, production-ready authentication and user management system built with 
 - **Batch Email Processing** with concurrent sending
 - **Template Caching** (memory + Redis) for performance
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 auth-me/
@@ -192,7 +192,7 @@ INITIAL_ADMIN_NAME=System Administrator
 }
 ```
 
-## 🔐 Security Features
+## Security Features
 
 ### Authentication & Authorization
 - JWT tokens with configurable expiration
@@ -225,7 +225,7 @@ Sophisticated tag-based cache invalidation ensures data consistency:
 - Bulk operations trigger targeted cache cleanup
 - Automatic cleanup of expired cache entries
 
-## 🧪 Testing
+## Testing
 
 ```bash
 # Run all tests
@@ -244,7 +244,7 @@ cargo test --lib
 cargo test --bin auth-me
 ```
 
-## 🚀 Deployment
+## Deployment
 
 ### Docker Deployment
 
@@ -272,7 +272,7 @@ cargo test --bin auth-me
 - Set up log aggregation
 - Configure health checks
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -280,11 +280,11 @@ cargo test --bin auth-me
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🔗 Related Projects
+## Related Projects
 
 This authentication system can be integrated with various frontend frameworks:
 - React/Next.js applications
@@ -292,7 +292,7 @@ This authentication system can be integrated with various frontend frameworks:
 - Flutter mobile apps
 - Any application requiring JWT-based authentication
 
-## 📞 Support
+## Support
 
 - Create an issue for bug reports
 - Use discussions for questions
